@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "koboyo-browser": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }
+  }
+}

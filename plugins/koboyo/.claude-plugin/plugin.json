@@ -1,6 +1,6 @@
 {
   "name": "koboyo",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Koboyo (koboyo.com) diagram-as-code: verified DSL syntax for architecture, sequence, ERD, orgchart diagrams + browser rendering workflow",
   "author": {
     "name": "J33-AI"
