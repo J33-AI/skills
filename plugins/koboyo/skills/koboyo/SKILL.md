@@ -90,7 +90,7 @@ group Edge [teal] {
 ## Verified example (rendered correctly first try)
 
 ```
-title: LexPortal dev stack
+title: Web app dev stack
 
 Browser [browser]
 Caddy [server, teal]
@@ -98,14 +98,14 @@ nginx [tech/nginx, green]
 api = FastAPI auth-api [tech/fastapi, green]
 PostgreSQL [tech/postgres, blue]
 Redis [tech/redis, red]
-Regula [server, orange]
+Scanner = Doc Scanner [server, orange]
 
 Browser -> Caddy: https
 Caddy -> nginx: proxy
 nginx -> api: /api
 api -> PostgreSQL: sql
 api -> Redis: sessions
-api --> Regula: scan document
+api --> Scanner: scan document
 ```
 
 ## Browser workflow

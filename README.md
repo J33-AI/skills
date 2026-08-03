@@ -5,12 +5,7 @@ Shared Claude Code skills for the J33-AI team, packaged as an installable plugin
 ## Prerequisites
 
 1. **Claude Code** installed and signed in (`npm install -g @anthropic-ai/claude-code` or the desktop app).
-2. **GitHub access to the J33-AI org** — this repo is private. Verify with:
-   ```bash
-   gh auth status          # must show an account with J33-AI access
-   gh repo view J33-AI/skills   # should succeed
-   ```
-   If your `git`/`gh` credentials can't read the repo, `/plugin marketplace add` will fail.
+2. **git** available on PATH (the marketplace is fetched via git clone; repo is public, no auth needed).
 3. **Node.js ≥ 18 with `npx`** — the koboyo plugin bundles a Playwright browser-automation MCP server started via `npx @playwright/mcp`. First start downloads the package (and a browser on first `browser_*` use).
 4. *(Optional, better)* **Claude in Chrome extension** — if you have it, agents drive your real Chrome instead of the bundled Playwright browser. Install the extension in Chrome, then grant koboyo.com site permission in its settings. The koboyo skill's workflow was verified against this path.
 
