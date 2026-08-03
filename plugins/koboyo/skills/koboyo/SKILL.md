@@ -110,6 +110,8 @@ api --> Regula: scan document
 
 ## Browser workflow
 
+> **Dependency note**: the syntax sections above need nothing — any agent can write Koboyo code, and a human can paste it into koboyo.com's `</>` panel manually. Everything below (rendering, export, PNG download) requires browser automation: written against the Claude in Chrome extension (`mcp__claude-in-chrome__*` tools, koboyo.com site permission granted). Steps are keyboard/click-level, so they port to Playwright or similar; the incident notes are Chrome-extension-specific. No API exists — automation or manual paste are the only paths.
+
 1. Navigate to https://koboyo.com — full editor works anonymously, no login (login = Google/GitHub/email, only for saving/AI/slides).
 2. Open code panel: `</>` icon top right, or "Edit as code" link on a diagram frame.
 3. Paste code → "Update diagram" button or Cmd+Enter. **Generating REPLACES the currently attached diagram**; code persists in panel for tweaking. To create a NEW frame instead: dismiss the `Editing "<name>". Generating replaces it.` banner via its "x" — the button label flips to "Generate diagram" (that label is the reliable signal the next generate creates a new frame).
