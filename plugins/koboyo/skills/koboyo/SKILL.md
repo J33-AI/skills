@@ -122,6 +122,21 @@ api --> Regula: scan document
    Before clearing, back up any diagram you didn't author: `get_page_text` on the canvas tab dumps the full code-panel source + all frame labels verbatim — regenerating from that source reproduces the diagram identically.
 6. **Export needs two round-trips** (browser automation): click "Export", CONFIRM submenu painted (screenshot), then click "PNG image" in a separate tool call. Both clicks in one batch fail silently — no file, no error. Verify by listing ~/Downloads. Exports download as `canvas.png`, browser appends `(N)`.
 7. Shortcuts: Cmd+1 = zoom to fit; Cmd+Z = undo. Code editor has NO auto-pairing/auto-indent — braces and quotes type in verbatim (paste-by-typing is safe). Diagrams round-trip: clicking a frame label reloads its current code into the panel.
+
+## Full pipeline: generate → export → download PNG (battle-tested, 12+ renders)
+
+Per diagram, in order:
+
+1. **Clean canvas**: dismiss `Editing "<name>"` banner (x) → click empty canvas spot → Cmd+1 → Cmd+A → Delete → screenshot to confirm empty. (Cmd+1 first is non-negotiable: Cmd+A only selects in-viewport shapes; off-screen orphans silently contaminate the export.)
+2. **Generate**: type/paste the DSL into the `</>` panel → button must read "Generate diagram" (not "Update diagram") → Cmd+Enter.
+3. **Verify compile**: dismiss any autocomplete dropdown first (click elsewhere in panel — it covers the status line), then read the status line (`Added N shapes · M arrows` / `N tables · M relations` / `N lifelines · M messages`) and compare against the source's node/edge count. Check for skipped-line diagnostics.
+4. **Frame it**: Cmd+1 (zoom to fit) — cosmetic only; export ignores viewport, but the confirm screenshot needs it.
+5. **Export (two separate tool calls, never one batch)**: click hamburger → Export, screenshot to CONFIRM the submenu painted; THEN click "PNG image" in a new call. Single-batch double-clicks fail silently — submenu never paints, no file, no error.
+6. **Confirm download**: `ls -t ~/Downloads/canvas*.png | head -1` — file appears as `canvas.png` or `canvas (N).png`. Chrome reuses freed names: if you moved the previous export away, the next one may reuse its number, so always take newest-by-mtime, never guess the name.
+7. **Move immediately** to its final path: `mv "$(ls -t ~/Downloads/canvas*.png | head -1)" target/dir/my-diagram.png` — doing this per-diagram keeps names unambiguous.
+8. **Verify by reading the PNG file** (not the canvas view): correct diagram, no orphan shapes, dimensions/aspect sane. This step has caught real contamination.
+
+Incidents to expect: extension can drop connection mid-batch ("Browser extension is not connected") — the actions may have EXECUTED anyway; screenshot canvas state before re-running or you get duplicate renders. A frozen tab recovers by reload; Koboyo's localStorage keeps the diagram, but an old frame may resurrect from a stale snapshot — check for orphans after reload.
 6. In Claude Code main session: always drive the browser via the Agent tool (user preference), never direct chrome MCP tools.
 
 ## Common mistakes
