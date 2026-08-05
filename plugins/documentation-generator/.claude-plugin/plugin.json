@@ -1,0 +1,9 @@
+{
+  "name": "documentation-generator",
+  "version": "1.0.0",
+  "description": "Generate technical documentation from a codebase — architecture overviews, schema references, API contracts, sequence/flow docs — as .docx with drawn diagrams plus a Markdown mirror",
+  "author": {
+    "name": "J33-AI"
+  },
+  "keywords": ["documentation", "docs", "docx", "architecture", "schema-reference", "api-contract", "sequence-diagram", "technical-writing"]
+}
