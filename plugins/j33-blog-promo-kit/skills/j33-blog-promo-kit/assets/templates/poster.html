@@ -19,11 +19,8 @@
 /* ── J33.AI tokens (see references/brand.md) ───────────────────────────── */
 :root{
   --primary:#0099CC;
-  --secondary:#1E3A8A;
   --navy:#0A0D33;
   --navy-light:#01102D;
-  --body-light:#94A3B8;
-  --body:#7A7A7A;
   --paper:#F6F0E2;
   --photo-dark:#02080F;
 }
@@ -63,9 +60,17 @@ body{
 .poster[data-surface="photo"] .bg{background:var(--photo-dark)}
 .photo{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0}
 .scrim{position:absolute; inset:0; z-index:1}
+/* The scrim clears rightwards on wide/split, where the text stays left, and
+   fades top-to-bottom on stack, where the headline runs the full width.
+   Same stops as compose.py. */
 .poster[data-surface="photo"] .scrim{
   background:
     linear-gradient(90deg, rgba(2,8,15,.94) 0%, rgba(2,8,15,.80) 38%, rgba(2,8,15,0) 68%),
+    linear-gradient(0deg, rgba(10,13,51,.18), rgba(10,13,51,.18));
+}
+.poster[data-surface="photo"][data-layout="stack"] .scrim{
+  background:
+    linear-gradient(180deg, rgba(2,8,15,.90) 0%, rgba(2,8,15,.62) 100%),
     linear-gradient(0deg, rgba(10,13,51,.18), rgba(10,13,51,.18));
 }
 
@@ -82,28 +87,24 @@ body{
   display:flex; align-items:center; justify-content:center;
   min-width:0; min-height:0; overflow:hidden;
 }
-/* An inline SVG with a viewBox letterboxes itself via preserveAspectRatio, so
-   giving it the full box and letting it fit inside beats computing a height. */
+/* An SVG with a viewBox letterboxes itself, so give it the full box. */
 .col-art > svg{width:100%; height:100%; display:block}
 .col-art > img{max-width:100%; max-height:100%; display:block}
 
-.poster[data-layout="wide"]  .frame{flex-direction:row; align-items:stretch}
-.poster[data-layout="wide"]  .col-text{flex:0 0 46%}
-.poster[data-layout="wide"]  .col-art {flex:1 1 auto}
-
+/* --text-frac comes from profiles.text_frac(), shared with compose.py and verify.py. */
+.poster[data-layout="wide"]  .frame,
 .poster[data-layout="split"] .frame{flex-direction:row; align-items:stretch}
-.poster[data-layout="split"] .col-text{flex:0 0 52%}
-.poster[data-layout="split"] .col-art {flex:1 1 auto}
+.poster[data-layout="wide"]  .col-text,
+.poster[data-layout="split"] .col-text{flex:0 0 calc(var(--text-frac) * 100%)}
+.poster[data-layout="wide"]  .col-art,
+.poster[data-layout="split"] .col-art{flex:1 1 auto}
 
 .poster[data-layout="stack"] .frame{flex-direction:column; justify-content:center}
 .poster[data-layout="stack"] .col-text{flex:0 0 auto}
-/* flex-basis 0, not auto: the item then has a definite resolved height, which
-   is what lets the SVG's height:100% compute instead of falling back to
-   intrinsic sizing (and rendering tiny). */
-.poster[data-layout="stack"] .col-art {flex:1 1 0; width:100%; margin-top:var(--gutter); min-height:36%}
-.poster[data-layout="stack"][data-art="none"] .col-art{display:none}
-.poster:not([data-layout="stack"])[data-art="none"] .col-art{display:none}
-.poster:not([data-layout="stack"])[data-art="none"] .col-text{flex:0 0 78%}
+/* flex-basis 0 gives the item a definite height, so the SVG's height:100%
+   resolves instead of rendering tiny. */
+.poster[data-layout="stack"] .col-art {flex:1 1 0; width:100%; margin-top:var(--gutter); min-height:calc(var(--stack-art-frac) * 100%)}
+.poster[data-art="none"] .col-art{display:none}
 
 /* ── type ───────────────────────────────────────────────────────────────── */
 .eyebrow{
@@ -139,37 +140,18 @@ body{
 .logo{
   font-size:var(--fs-logo); font-weight:800; letter-spacing:-.02em; line-height:1;
 }
-.logo .ai{color:var(--primary)}
 
 .logo-top{margin-bottom:calc(var(--u) * 3.4)}
 .logo-bot{margin-top:calc(var(--u) * 3.0)}
-.poster[data-surface="paper"] .logo-top{display:none}
-.poster:not([data-surface="paper"]) .logo-bot{display:none}
+.poster[data-logo="bottom"] .logo-top{display:none}
+.poster[data-logo="top"] .logo-bot{display:none}
 
-/* colour per surface */
-.poster[data-surface="paper"]{color:var(--navy)}
-.poster[data-surface="paper"] .eyebrow{color:var(--primary)}
-.poster[data-surface="paper"] .headline{color:var(--navy)}
-.poster[data-surface="paper"] .subhead{color:#4A4A55}
-.poster[data-surface="paper"] .rule{background:var(--navy)}
-.poster[data-surface="paper"] .kicker{color:var(--navy)}
-.poster[data-surface="paper"] .logo{color:var(--navy)}
-
-.poster[data-surface="navy"],.poster[data-surface="photo"]{color:#fff}
-.poster[data-surface="navy"] .eyebrow,
-.poster[data-surface="photo"] .eyebrow{color:var(--primary)}
-.poster[data-surface="navy"] .headline,
-.poster[data-surface="photo"] .headline{color:#fff}
-.poster[data-surface="navy"] .subhead,
-.poster[data-surface="photo"] .subhead{color:var(--body-light)}
-.poster[data-surface="navy"] .rule,
-.poster[data-surface="photo"] .rule{background:rgba(255,255,255,.22)}
-.poster[data-surface="navy"] .kicker,
-.poster[data-surface="photo"] .kicker{color:var(--body-light)}
-.poster[data-surface="navy"] .logo,
-.poster[data-surface="photo"] .logo{color:#fff}
-
-.accent{color:var(--primary)}
+/* type colours arrive from profiles.SURFACES as --c-* variables */
+.poster{color:var(--c-fg)}
+.eyebrow,.accent,.logo .ai{color:var(--primary)}
+.subhead{color:var(--c-subhead)}
+.rule{background:var(--c-rule)}
+.kicker{color:var(--c-kicker)}
 
 /* ── code artwork ───────────────────────────────────────────────────────── */
 .code{
@@ -178,12 +160,7 @@ body{
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   font-size:var(--fs-code); line-height:1.62; white-space:pre;
   overflow:hidden;
-}
-.poster[data-surface="paper"] .code{
-  background:rgba(10,13,51,.045); border:2px solid rgba(10,13,51,.14); color:var(--navy);
-}
-.poster:not([data-surface="paper"]) .code{
-  background:rgba(255,255,255,.045); border:2px solid rgba(255,255,255,.12); color:#E6EDF6;
+  background:var(--c-code-panel); border:2px solid var(--c-code-edge); color:var(--c-code-fg);
 }
 .code .hl{color:var(--primary); font-weight:600}
 .code-lang{
@@ -200,8 +177,7 @@ body{
   const P = window.__PAYLOAD__;
   const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
-  // Wrap the accent phrase in a span. Case-insensitive, first occurrence only —
-  // highlighting every instance turns the headline into a rash of colour.
+  // Wrap the accent phrase in a span. Case-insensitive, first occurrence only.
   function withAccent(headline, accent){
     const h = esc(headline);
     if(!accent) return h;
@@ -244,8 +220,9 @@ body{
     ? '<div class="bg"><img class="photo" src="' + P.photo + '"><div class="scrim"></div></div>'
     : '<div class="bg"></div>';
 
-  // Every geometry and type value arrives from profiles.py, so the Chromium and
-  // Pillow paths stay in agreement about the layout.
+  // Geometry, type and colours all come from profiles.py. Translucent colours
+  // arrive as (r, g, b, a) with a in 0-255.
+  const rgba = ([r, g, b, a]) => 'rgba(' + r + ',' + g + ',' + b + ',' + (a / 255).toFixed(3) + ')';
   const vars = {
     '--w':          P.w + 'px',
     '--h':          P.h + 'px',
@@ -253,19 +230,29 @@ body{
     '--inset-x':    P.inset_x + 'px',
     '--inset-y':    P.inset_y + 'px',
     '--gutter':     P.gutter + 'px',
+    '--text-frac':  P.text_frac,
+    '--stack-art-frac': P.stack_art_frac,
     '--fs-headline':P.fs_headline_max + 'px',
     '--fs-eyebrow': P.fs_eyebrow + 'px',
     '--fs-subhead': P.fs_subhead + 'px',
     '--fs-kicker':  P.fs_kicker + 'px',
     '--fs-logo':    P.fs_logo + 'px',
-    '--fs-code':    P.fs_code + 'px'
+    '--fs-code':    P.fs_code + 'px',
+    '--c-fg':       P.c_fg,
+    '--c-subhead':  P.c_subhead,
+    '--c-kicker':   P.c_kicker,
+    '--c-rule':     rgba(P.c_rule),
+    '--c-code-fg':  P.c_code_fg,
+    '--c-code-panel': rgba(P.c_code_panel),
+    '--c-code-edge':  rgba(P.c_code_edge)
   };
   const styleAttr = Object.entries(vars).map(([k,v]) => k + ':' + v).join(';');
 
   document.getElementById('root').innerHTML =
     '<div class="poster" style="' + styleAttr + '"' +
         ' data-surface="' + P.surface + '" data-layout="' + P.layout +
-        '" data-display="' + (P.display||'inter') + '" data-art="' + (art ? P.art : 'none') + '">' +
+        '" data-display="' + (P.display||'inter') + '" data-art="' + (art ? P.art : 'none') +
+        '" data-logo="' + (P.logo_top ? 'top' : 'bottom') + '">' +
       bg +
       '<div class="grid" style="background-image:url(\'' + gridSVG + '\');background-size:' +
           (P.w/22).toFixed(1) + 'px ' + (P.w/22).toFixed(1) + 'px"></div>' +
@@ -289,8 +276,7 @@ body{
   const col    = document.querySelector('.col-text');
 
   // ── fit the code block ──────────────────────────────────────────────────
-  // Code is pre-formatted, so a single long line silently clips at the box
-  // edge. Shrink until the longest line fits rather than truncating it.
+  // Pre-formatted code clips at the box edge; shrink until the longest line fits.
   (function(){
     const code = document.querySelector('.code');
     if(!code) return;
@@ -304,13 +290,12 @@ body{
   })();
 
   // ── tighten the artwork viewBox ─────────────────────────────────────────
-  // Hand-authored SVG almost always carries slack inside its viewBox, and that
-  // slack is dead space that shrinks the drawing. Refit the viewBox to what was
-  // actually drawn. Pad for stroke width and arrow markers, which getBBox()
-  // does not account for.
+  // Hand-authored SVG usually has slack in its viewBox that shrinks the
+  // drawing. Refit to what was drawn, padded for strokes and markers, which
+  // getBBox() ignores.
   (function(){
     const s = document.querySelector('.col-art > svg');
-    if(!s || P.fit_viewbox === false) return;
+    if(!s || !P.fit_viewbox) return;
     try{
       const b = s.getBBox();
       if(!(b.width > 0 && b.height > 0)) return;
@@ -322,12 +307,10 @@ body{
   })();
 
   // ── auto-fit the headline ───────────────────────────────────────────────
-  // Shrink until the text column fits its box. Report the final size so the
-  // caller can warn when we bottomed out — that means "cut words", not
-  // "lower the floor". See references/layouts.md.
-  // In `stack` the artwork shares the vertical budget with the text, so
-  // measuring the text column alone under-reports and the poster silently
-  // overflows its safe inset. Measure the frame.
+  // Shrink until the column fits. Report the final size so kit.py can warn
+  // when it bottomed out: that means cut words, not lower the floor. In
+  // `stack` the artwork shares the vertical budget, so measure the frame,
+  // not the column alone.
   const measure = () => P.layout === 'stack'
     ? Math.max(frame.scrollHeight, col.scrollHeight + artHeight())
     : col.scrollHeight;
@@ -349,11 +332,7 @@ body{
     size -= 1;
     poster.style.setProperty('--fs-headline', size + 'px');
   }
-  window.__FIT__ = {
-    size: size,
-    floored: size <= P.fs_headline_min,
-    overflow: Math.max(0, Math.round(measure() - budget))
-  };
+  window.__FIT__ = {size: size, floored: size <= P.fs_headline_min};
   document.documentElement.setAttribute('data-ready','1');
 })();
 </script>

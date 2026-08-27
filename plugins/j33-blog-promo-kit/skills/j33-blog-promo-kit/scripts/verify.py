@@ -2,32 +2,31 @@
 
     python scripts/verify.py out/
 
-Checks, per file:
-  * exact pixel dimensions
-  * whether artwork survives the display crop (the banner's 7:3 and
-    Instagram's 1:1 grid crop)
-  * contrast of the surface-appropriate text colour against the background
-  * file weight against the budget the shipped j33.ai images set
+Per file: exact pixel size; whether content survives the display crop (the
+banner's 7:3, Instagram's 1:1 grid); contrast of the surface's text colour
+against the background under the glyphs, 3:1 for display type and 4.5:1 for
+smaller text; and .webp weight against the budget.
 
-Also writes `_crop-<name>.png` previews so you can look at what the viewer
-actually gets rather than trusting the arithmetic.
+Reads `_kit.json` when kit.py has written one. Without it the canvas is
+guessed from the filename and the surface from the image, and it says so.
 
-The script cannot tell you a line broke badly or the diagram collides with the
-logo. Open the PNGs too.
+Writes `_crop-<name>.png` previews of what the viewer gets.
+
+It cannot tell you a line broke badly or the diagram hits the logo. Open the
+PNGs too.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageFilter, ImageStat
+from PIL import Image, ImageColor, ImageFilter, ImageStat
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import profiles  # noqa: E402
-
-SIZE_BUDGET_KB = {"banner": 340, "card": 200}
 
 
 def luminance(rgb) -> float:
@@ -45,21 +44,63 @@ def contrast(a, b) -> float:
 
 
 def background_of(im: Image.Image) -> tuple[int, int, int]:
-    """Median colour of a border ring — a decent stand-in for the surface."""
-    w, h = im.size
-    ring = Image.new("RGB", (w, max(1, h // 20)))
-    ring.paste(im.crop((0, 0, w, h // 20)), (0, 0))
-    return tuple(int(v) for v in ImageStat.Stat(ring).median[:3])
+    """Median colour of the top strip, a stand-in for a flat surface."""
+    top = im.crop((0, 0, im.width, max(1, im.height // 20)))
+    return tuple(int(v) for v in ImageStat.Stat(top).median[:3])
+
+
+def text_boxes(im: Image.Image, info: dict) -> dict:
+    """The horizontal span the type occupies, per size class.
+
+    The renderers report where the glyphs landed. Only the x range is used;
+    sampling runs the full frame height so the median finds background
+    rather than an Anton stem.
+
+    Without a manifest, fall back to the whole text column.
+    """
+    y0, y1 = info["inset_y"], im.height - info["inset_y"]
+    box = info.get("text_box")
+    if isinstance(box, dict) and any(box.values()):
+        return {k: [v[0], y0, v[2], y1]
+                for k, v in box.items() if v and len(v) == 4}
+    x0 = info["inset_x"]
+    x1 = x0 + int((im.width - 2 * x0) * info.get("text_frac", 1.0))
+    return {"column": [x0, y0, x1, y1]}
+
+
+def worst_background(im: Image.Image, box, fg, samples: int = 24):
+    """The least favourable background colour under `box`.
+
+    Samples columns across the box and takes each column's median down it:
+    glyphs are a minority of any column's height, so the median lands on the
+    background behind them. A border ring would read the photograph instead
+    of the scrim.
+
+    Returns (rgb, x) for the column that contrasts worst with `fg`.
+    """
+    x0, y0, x1, y1 = box
+    x0, y0 = max(0, int(x0)), max(0, int(y0))
+    x1, y1 = min(im.width, int(x1)), min(im.height, int(y1))
+    if x1 - x0 < 2 or y1 - y0 < 2:
+        return background_of(im), x0
+
+    worst, worst_x, worst_c = None, x0, float("inf")
+    step = max(1, (x1 - x0) // samples)
+    for x in range(x0, x1, step):
+        col = im.crop((x, y0, x + 1, y1))
+        med = tuple(int(v) for v in ImageStat.Stat(col).median[:3])
+        c = contrast(fg, med)
+        if c < worst_c:
+            worst, worst_x, worst_c = med, x, c
+    return worst, worst_x
 
 
 def ink_fraction(im: Image.Image, thresh: int = 60) -> float:
-    """Fraction of pixels sitting on a strong edge.
+    """Fraction of pixels on a strong edge.
 
-    Mean edge energy does not work here: the navy surface carries a 5% grid
-    whose edges are everywhere, so every strip looks as busy as the artwork.
-    Type and diagram strokes produce edges well above 60; the grid and the
-    gradients stay under 20. FIND_EDGES fabricates a bright border, so trim
-    before measuring.
+    Type and diagram strokes produce edges well above 60; the navy grid and
+    the gradients stay under 20, so a mean would not separate them.
+    FIND_EDGES adds a bright border, so trim before measuring.
     """
     if im.width < 8 or im.height < 8:
         return 0.0
@@ -71,12 +112,19 @@ def ink_fraction(im: Image.Image, thresh: int = 60) -> float:
     return sum(hist[thresh:]) / total if total else 0.0
 
 
-def check(path: Path, canvas: str, out_dir: Path) -> tuple[list[str], list[str]]:
+def check(path: Path, canvas: str, out_dir: Path,
+          info: dict | None = None) -> tuple[list[str], list[str]]:
     """Returns (issues, notes). Issues block; notes are advisory."""
     c = profiles.CANVASES[canvas]
     im = Image.open(path).convert("RGB")
     issues: list[str] = []
     notes: list[str] = []
+
+    if info is None:
+        # No manifest: assume the narrower text column, the reading least
+        # likely to invent a contrast failure.
+        info = dict(inset_x=c["inset_x"], inset_y=c["inset_y"], surface=None,
+                    text_frac=profiles.text_frac(c["layout"], True))
 
     if im.size != (c["w"], c["h"]):
         issues.append(f"wrong size {im.width}x{im.height}, expected {c['w']}x{c['h']}")
@@ -97,35 +145,55 @@ def check(path: Path, canvas: str, out_dir: Path) -> tuple[list[str], list[str]]
         if right < im.width:
             strips.append(("right", im.crop((right, 0, im.width, im.height))))
 
+        # On a photograph this test cannot tell the picture's own texture
+        # from type, and full-bleed photography is meant to run into the
+        # strip. Say what was measured and leave the judgement to the human.
+        photo = info.get("surface") == "photo"
         for side, strip in strips:
             f = ink_fraction(strip)
-            if f > 0.002:
+            if f <= 0.002:
+                continue
+            where = (f"the {side} strip that the {c['crop_ratio']:.3f} display "
+                     f"crop removes")
+            if photo:
+                notes.append(
+                    f"{f * 100:.2f}% of {where} carries edges, but this is a "
+                    f"photo surface and the check cannot tell the photograph's "
+                    f"own texture from type - open _crop-{canvas}.png and look")
+            else:
                 issues.append(
-                    f"content sits in the {side} strip that the "
-                    f"{c['crop_ratio']:.3f} display crop removes "
-                    f"({f * 100:.2f}% of that strip is ink) - "
-                    f"see _crop-{canvas}.png")
+                    f"content sits in {where} ({f * 100:.2f}% of that strip is "
+                    f"ink) - see _crop-{canvas}.png")
 
-    # Which foreground applies depends on the surface, and the surface is
-    # readable from the background itself: paper is light and takes navy type,
-    # navy and photo are dark and take white.
-    bg = background_of(im)
-    light = luminance(bg) > 0.5
-    fg, fg_name = ((10, 13, 51), "navy #0A0D33") if light else ((255, 255, 255), "white")
+    # Which type colour to test depends on the surface. The manifest names it;
+    # without one, read it off the background: paper is light and takes navy
+    # type, navy and photo are dark and take white.
+    surface = info.get("surface")
+    if surface is None:
+        surface = "paper" if luminance(background_of(im)) > 0.5 else "navy"
+    fg_hex = profiles.SURFACES[surface]["fg"]
+    fg = ImageColor.getrgb(fg_hex)
 
-    cf = contrast(fg, bg)
-    if cf < 4.5:
-        issues.append(f"body text ({fg_name}) is {cf:.1f}:1 on this background, "
-                      f"below the 4.5:1 minimum")
+    # WCAG puts large text at 3:1 and everything else at 4.5:1; the headline
+    # here is four to six times the size of the eyebrow.
+    bars = {"display": (3.0, "display type"), "body": (4.5, "small text"),
+            "column": (4.5, "text")}
+    for kind, box in sorted(text_boxes(im, info).items()):
+        floor, label = bars.get(kind, (4.5, kind))
+        bg, bg_x = worst_background(im, box, fg)
+        ratio = contrast(fg, bg)
+        if ratio < floor:
+            issues.append(f"{label} ({fg_hex}) is {ratio:.1f}:1 against the "
+                          f"background at x={bg_x}, below the {floor}:1 minimum")
+        if kind != "display":
+            continue
+        cc = contrast(ImageColor.getrgb(profiles.PRIMARY), bg)
+        if cc < 3.0:
+            notes.append(f"accent cyan is {cc:.1f}:1 at x={bg_x} - fine for a "
+                         f"display headline, too low for small text")
 
-    cc = contrast((0, 153, 204), bg)
-    if cc < 3.0:
-        notes.append(f"accent cyan is {cc:.1f}:1 here - fine for the display "
-                     f"headline, too low for small text")
-
-    # The website files ship as .webp, so that is what the budget applies to.
-    # A heavy intermediate PNG is not a problem in itself.
-    budget = SIZE_BUDGET_KB.get(canvas)
+    # The website files ship as .webp, so the budget applies to those.
+    budget = c["webp_kb"]
     if budget:
         webp = path.with_suffix(".webp")
         if webp.exists():
@@ -147,25 +215,43 @@ def main() -> int:
         print(f"not a directory: {out_dir}", file=sys.stderr)
         return 2
 
-    # Resolve most-specific first. `banner` is `<slug>.png`, which as a glob is
-    # just `*.png` and would otherwise swallow instagram.png.
-    pool = [p for p in sorted(out_dir.glob("*.png")) if not p.name.startswith("_")]
     by_name: dict[str, Path] = {}
+    info: dict[str, dict] = {}
 
-    for canvas, c in profiles.CANVASES.items():
-        if "{slug}" not in c["out"]:
-            match = next((p for p in pool if p.name == c["out"]), None)
-            if match:
-                by_name[canvas] = match
-                pool.remove(match)
+    manifest = out_dir / "_kit.json"
+    if manifest.is_file():
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            for entry in data.get("canvases", []):
+                f = out_dir / entry["file"]
+                if entry["canvas"] in profiles.CANVASES and f.is_file():
+                    by_name[entry["canvas"]] = f
+                    info[entry["canvas"]] = entry
+        except (ValueError, KeyError, OSError) as e:
+            print(f"note: ignoring unreadable {manifest.name} ({e})")
 
-    card = next((p for p in pool if p.stem.endswith("-card")), None)
-    if card:
-        by_name["card"] = card
-        pool.remove(card)
+    if not by_name:
+        # No manifest: match on filename, most specific first, because
+        # `banner` is `<slug>.png` and as a glob would swallow instagram.png.
+        pool = [p for p in sorted(out_dir.glob("*.png"))
+                if not p.name.startswith("_")]
+        for canvas, c in profiles.CANVASES.items():
+            if "{slug}" not in c["out"]:
+                match = next((p for p in pool if p.name == c["out"]), None)
+                if match:
+                    by_name[canvas] = match
+                    pool.remove(match)
 
-    if pool:
-        by_name["banner"] = pool[0]
+        card = next((p for p in pool if p.stem.endswith("-card")), None)
+        if card:
+            by_name["card"] = card
+            pool.remove(card)
+
+        if pool:
+            by_name["banner"] = pool[0]
+        if by_name:
+            print("note: no _kit.json here, so the surface and text column are "
+                  "being guessed. Re-run through kit.py for exact checks.\n")
 
     if not by_name:
         print(f"no kit images found in {out_dir}", file=sys.stderr)
@@ -178,7 +264,7 @@ def main() -> int:
             total += 1
             continue
         p = by_name[canvas]
-        issues, notes = check(p, canvas, out_dir)
+        issues, notes = check(p, canvas, out_dir, info.get(canvas))
         kb = p.stat().st_size // 1024
         status = "ok" if not issues else f"{len(issues)} issue(s)"
         print(f"  {canvas:<10} {kb:>4}KB  {p.name}   {status}")

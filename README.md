@@ -7,7 +7,7 @@ Shared Claude Code skills for the J33-AI team, packaged as an installable plugin
 1. **Claude Code** installed and signed in (`npm install -g @anthropic-ai/claude-code` or the desktop app).
 2. **git** available on PATH (the marketplace is fetched via git clone; repo is public, no auth needed).
 3. **Node.js ≥ 18 with `npx`** — the koboyo plugin bundles a Playwright browser-automation MCP server started via `npx @playwright/mcp`. First start downloads the package (and a browser on first `browser_*` use).
-4. **Python 3.10+ with Pillow** (`pip install pillow`) — the j33-blog-promo-kit plugin renders images. Optional extras for it: **Playwright + Chromium** (`pip install playwright && playwright install chromium`) for the high-fidelity renderer, and **cairosvg** (`pip install cairosvg`) if you want SVG diagrams on the no-browser fallback path. Without Playwright it falls back to Pillow automatically.
+4. **Python 3.10+ with Pillow** (`pip install pillow`) — the j33-blog-promo-kit plugin renders images. Optional: **Playwright + Chromium** (`pip install playwright && playwright install chromium`) for the high-fidelity renderer. Without it the plugin uses Pillow and still renders all five images, diagrams included.
 5. *(Optional, better)* **Claude in Chrome extension** — if you have it, agents drive your real Chrome instead of the bundled Playwright browser. Install the extension in Chrome, then grant koboyo.com site permission in its settings. The koboyo skill's workflow was verified against this path.
 
 ## Install
@@ -39,8 +39,7 @@ On first use of the bundled MCP, Claude Code shows the standard "MCP server dete
 | Skill | What it does |
 |---|---|
 | **koboyo** | Diagram-as-code on [koboyo.com](https://koboyo.com): the full verified DSL (nodes, edges, groups, icons, 20 diagram families incl. sequence blocks, ERD crow's-foot, orgchart) plus the battle-tested browser rendering workflow — clean-canvas recipe, generate→export→download-PNG pipeline, layout model. Everything verified by live rendering; includes the traps (flowchart family is single-lane, Cmd+A misses off-viewport shapes, export needs two round-trips) so agents don't rediscover them. |
-
-| **j33-blog-promo-kit** | Turns a blog article into a full publishing kit: five images at exact platform dimensions (Instagram 1080×1350, X 1600×900, LinkedIn 1200×1200, j33.ai banner 1600×873 and card 1659×948) plus the post copy for each channel. Brand tokens are pulled from the live j33.ai CSS. Every glyph is rendered by a real text engine (Chromium or Pillow), never an image model, so no warped letterforms — artwork is an SVG diagram of the article's own architecture or real code from the piece. Ships a verifier that checks the banner's 7:3 display crop, Instagram's 1:1 grid crop, contrast and file weight. |
+| **j33-blog-promo-kit** | Article-to-promo-kit for [j33.ai](https://j33.ai): five images at exact platform sizes (Instagram 1080×1350, X 1600×900, LinkedIn 1200×1200, website banner 1600×873, card 1659×948) plus the social copy per channel. Type is set by a real text engine (Chromium, Pillow fallback), artwork is the article's own diagram or code, brand tokens come from the live site CSS. Includes a verifier for the traps (banner displayed at 7:3, Instagram's 1:1 grid crop, contrast under the glyphs, webp weight budget) so nothing ships cropped or unreadable. |
 
 **No browser? Still useful.** The DSL sections work standalone — Claude writes the diagram code, you paste it into koboyo.com's `</>` panel yourself (Cmd+Enter to generate). Browser automation (bundled Playwright MCP or Claude in Chrome) is only needed for fully hands-off render + PNG export.
 

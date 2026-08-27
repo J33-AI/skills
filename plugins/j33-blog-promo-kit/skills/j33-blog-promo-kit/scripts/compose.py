@@ -1,50 +1,31 @@
-"""Pillow renderer — the no-browser path.
+"""Pillow renderer, used when Chromium is not available.
 
-Used when Playwright/Chromium is not available (notably ChatGPT's sandbox).
-Geometry and type scales come from profiles.py, so this agrees with the
-Chromium path on layout. Two honest differences:
-
-  * the navy surface uses a vertical gradient rather than a 152 degree one
-  * `art: diagram` needs cairosvg; without it the artwork is dropped and the
-    caller is told, rather than silently producing a different picture
+Geometry, type scales and colours come from profiles.py, so the layout matches
+the Chromium path. Two known differences: the navy gradient is vertical rather
+than angled, and `art: diagram` goes through svgpil.py, which renders the SVG
+subset in references/layouts.md and warns about anything outside it.
 
 Everything is drawn at 2x and resized with LANCZOS, for the same reason the
-browser path renders at deviceScaleFactor 2.
+browser path renders at deviceScaleFactor 2: 1:1 type looks thin.
 """
 
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageOps
 
 import profiles
+import svgpil
 
 SS = 2  # supersample factor
 
-_FONT_CACHE: dict[tuple, ImageFont.FreeTypeFont] = {}
 
-
-def _hex(c: str) -> tuple[int, int, int]:
-    c = c.lstrip("#")
-    return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
-
-
-def font(size: float, weight: int = 400, opsz: float = 14.0,
-         family: str = "inter") -> ImageFont.FreeTypeFont:
-    key = (round(size, 1), weight, opsz, family)
-    if key in _FONT_CACHE:
-        return _FONT_CACHE[key]
-    if family == "anton":
-        f = ImageFont.truetype(str(profiles.FONT_DIR / "Anton-Regular.ttf"), int(round(size)))
-    else:
-        f = ImageFont.truetype(str(profiles.FONT_DIR / "Inter.ttf"), int(round(size)))
-        try:
-            f.set_variation_by_axes([opsz, float(weight)])
-        except Exception:
-            pass  # static build; weight will just be Regular
-    _FONT_CACHE[key] = f
-    return f
+@functools.lru_cache(maxsize=2)
+def _open_rgb(path: str) -> Image.Image:
+    """Decode once per kit: the same photograph goes on all five canvases."""
+    return Image.open(path).convert("RGB")
 
 
 # ── rich-text runs, so the accent word can be tinted mid-headline ────────────
@@ -114,52 +95,74 @@ def _draw_runs(draw, xy, line, fnt, base, accent_col):
 
 # ── surfaces ─────────────────────────────────────────────────────────────────
 
-def _surface(p: dict, W: int, H: int) -> Image.Image:
+def _surface(p: dict, W: int, H: int) -> tuple[Image.Image, list[str]]:
+    """The background plate. Returns (image, warnings)."""
     s = p["surface"]
+    warn: list[str] = []
     if s == "paper":
-        im = Image.new("RGB", (W, H), _hex(profiles.PAPER))
+        im = Image.new("RGB", (W, H), profiles.PAPER)
         noise = Image.effect_noise((W, H), 14).convert("L")
         im = Image.composite(
             Image.new("RGB", (W, H), (214, 205, 186)), im,
             noise.point(lambda v: 40 if v > 150 else 0),
         )
-        return im
+        return im, warn
 
     if s == "photo":
-        base = Image.new("RGB", (W, H), _hex(profiles.PHOTO_DARK))
         try:
-            ph = Image.open(p["photo"]).convert("RGB")
-            sc = max(W / ph.width, H / ph.height)
-            ph = ph.resize((max(1, int(ph.width * sc)), max(1, int(ph.height * sc))),
-                           Image.LANCZOS)
-            base.paste(ph, ((W - ph.width) // 2, (H - ph.height) // 2))
-        except Exception:
-            pass
-        # scrim: opaque on the text side, clearing across
+            base = ImageOps.fit(_open_rgb(p["photo"]), (W, H), Image.LANCZOS)
+        except OSError as e:
+            # The path exists (resolve() checked), so the file is undecodable.
+            warn.append(f"photo could not be decoded ({e}); "
+                        f"the scrim was drawn over a flat plate")
+            base = Image.new("RGB", (W, H), profiles.PHOTO_DARK)
+        # The scrim clears rightwards on wide/split, where the text stays in
+        # the left half, and fades top-to-bottom on stack, where the headline
+        # runs the full width. Same stops as the template's CSS.
         scrim = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         sd = ImageDraw.Draw(scrim)
-        r, g, b = _hex(profiles.PHOTO_DARK)
-        for x in range(W):
-            t = min(1.0, x / (W * 0.68))
-            sd.line([(x, 0), (x, H)], fill=(r, g, b, int(240 * (1 - t) ** 1.25)))
+        r, g, b = ImageColor.getrgb(profiles.PHOTO_DARK)
+        if p["layout"] == "stack":
+            # linear-gradient(180deg, .90 -> .62)
+            for y in range(H):
+                t = y / max(1, H - 1)
+                sd.line([(0, y), (W, y)],
+                        fill=(r, g, b, int(round(255 * (0.90 - 0.28 * t)))))
+        else:
+            # .94 at 0, .80 at 38%, 0 at 68%, interpolated piecewise so the
+            # weight matches the CSS gradient where the headline ends.
+            for x in range(W):
+                u = x / max(1, W - 1)
+                if u <= 0.38:
+                    a = 0.94 + (0.80 - 0.94) * (u / 0.38)
+                elif u <= 0.68:
+                    a = 0.80 * (1.0 - (u - 0.38) / 0.30)
+                else:
+                    a = 0.0
+                sd.line([(x, 0), (x, H)], fill=(r, g, b, int(round(255 * a))))
         base = Image.alpha_composite(base.convert("RGBA"), scrim)
-        tint = Image.new("RGBA", (W, H), (*_hex(profiles.NAVY), 46))
-        return Image.alpha_composite(base, tint).convert("RGB")
+        tint = Image.new("RGBA", (W, H), (*ImageColor.getrgb(profiles.NAVY), 46))
+        return Image.alpha_composite(base, tint).convert("RGB"), warn
 
     # navy
-    top, bot = _hex(profiles.NAVY), _hex(profiles.NAVY_LIGHT)
+    top, bot = ImageColor.getrgb(profiles.NAVY), ImageColor.getrgb(profiles.NAVY_LIGHT)
     im = Image.new("RGB", (W, H))
     d = ImageDraw.Draw(im)
     for y in range(H):
         t = y / max(1, H - 1)
         d.line([(0, y), (W, y)],
                fill=tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3)))
-    # cyan bloom, bottom right — same gesture as the CSS radial-gradient
-    glow = Image.radial_gradient("L").resize((int(W * 1.7), int(H * 2.0)), Image.LANCZOS)
-    glow = glow.point(lambda v: max(0, 40 - int(v * 40 / 255)))
+    # cyan bloom, bottom right, like the CSS radial-gradient. The full glow
+    # would be 1.7W x 2.0H placed at (0.30W, 0.30H); only its top-left corner
+    # lands on the canvas, so build just that.
+    gx, gy = int(W * 0.30), int(H * 0.30)
+    vis_w, vis_h = W - gx, H - gy
+    glow = (Image.radial_gradient("L")
+            .crop((0, 0, round(256 * vis_w / (W * 1.7)), round(256 * vis_h / (H * 2.0))))
+            .resize((vis_w, vis_h), Image.LANCZOS)
+            .point(lambda v: max(0, 40 - int(v * 40 / 255))))
     layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    layer.paste(Image.new("RGB", glow.size, _hex(profiles.PRIMARY)),
-                (int(W * 0.30), int(H * 0.30)), glow)
+    layer.paste(Image.new("RGB", glow.size, profiles.PRIMARY), (gx, gy), glow)
     im = Image.alpha_composite(im.convert("RGBA"), layer).convert("RGB")
     # technical grid
     gl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -171,21 +174,7 @@ def _surface(p: dict, W: int, H: int) -> Image.Image:
     y = 0.0
     while y < H:
         gd.line([(0, y), (W, y)], fill=(255, 255, 255, 14)); y += step
-    return Image.alpha_composite(im.convert("RGBA"), gl).convert("RGB")
-
-
-def _rasterise_svg(svg: str, box_w: int, box_h: int):
-    try:
-        import cairosvg
-    except Exception:
-        return None
-    try:
-        import io
-        png = cairosvg.svg2png(bytestring=svg.encode("utf-8"),
-                               output_width=box_w, output_height=box_h)
-        return Image.open(io.BytesIO(png)).convert("RGBA")
-    except Exception:
-        return None
+    return Image.alpha_composite(im.convert("RGBA"), gl).convert("RGB"), warn
 
 
 # ── the composer ─────────────────────────────────────────────────────────────
@@ -194,197 +183,207 @@ def render_one(spec: dict, canvas: str, out_dir: Path) -> dict:
     p = profiles.resolve(spec, canvas)
     W, H = p["w"] * SS, p["h"] * SS
     ix, iy = p["inset_x"] * SS, p["inset_y"] * SS
-    gut = p["gutter"] * SS
+    gut = int(p["gutter"] * SS)
 
-    im = _surface(p, W, H)
+    im, warnings = _surface(p, W, H)
     draw = ImageDraw.Draw(im)
+    # The rule and the code panel are translucent and drawn with alpha, so
+    # they composite over whatever is underneath, photograph included.
+    draw_a = ImageDraw.Draw(im, "RGBA")
 
-    dark = p["surface"] != "paper"
-    c_head = (255, 255, 255) if dark else _hex(profiles.NAVY)
-    c_sub = _hex(profiles.BODY_LIGHT) if dark else (74, 74, 85)
-    c_kick = _hex(profiles.BODY_LIGHT) if dark else _hex(profiles.NAVY)
-    c_logo = (255, 255, 255) if dark else _hex(profiles.NAVY)
-    c_acc = _hex(profiles.PRIMARY)
-    # Pre-blend the rule rather than compositing a layer: it sits on a known
-    # surface colour, so a flat RGB is exact and far simpler.
-    if dark:
-        bg = _hex(profiles.NAVY_LIGHT)
-        c_rule = tuple(int(bg[i] + (255 - bg[i]) * 0.22) for i in range(3))
-    else:
-        c_rule = _hex(profiles.NAVY)
+    c_acc = profiles.PRIMARY
+    c_rule = tuple(p["c_rule"])
 
     frame_w, frame_h = W - 2 * ix, H - 2 * iy
-    text_w = int(frame_w * (0.46 if p["layout"] == "wide"
-                            else 0.52 if p["layout"] == "split" else 1.0))
-    if p["art"] == "none" or (p["art"] == "diagram" and not p["art_svg"]):
-        text_w = frame_w if p["layout"] == "stack" else int(frame_w * 0.78)
+    text_w = int(frame_w * p["text_frac"])
 
-    anton = p.get("display") == "anton"
-    warnings: list[str] = []
+    anton = p["display"] == "anton"
 
     def build(hsize: float):
         """Lay the text column out at a given headline size; return blocks + height."""
         blocks, y = [], 0
         if p["eyebrow"]:
-            f = font(p["fs_eyebrow"] * SS, 700, 14)
-            blocks.append(("track", p["eyebrow"].upper(), f,
-                           c_acc if dark else c_acc, 0.16, y))
+            f = profiles.font(p["fs_eyebrow"] * SS, 700)
+            blocks.append(("track", p["eyebrow"].upper(), f, c_acc, 0.16, y, "body"))
             y += int(p["fs_eyebrow"] * SS * 1.2 + p["u"] * SS * 1.6)
 
-        hf = (font(hsize, 400, 32, "anton") if anton
-              else font(hsize, 900, 32))
+        hf = (profiles.font(hsize, family="anton") if anton
+              else profiles.font(hsize, 900, 32))
         head = p["headline"].upper() if anton else p["headline"]
         lines = _wrap_runs(_runs(head, p["accent"]), hf, text_w, draw)
         lh = hsize * (1.02 if anton else 1.08)
         for ln in lines:
-            blocks.append(("runs", ln, hf, c_head, 0, y))
+            blocks.append(("runs", ln, hf, p["c_fg"], 0, y, "display"))
             y += lh
         y = int(y)
 
         if p["subhead"]:
-            f = font(p["fs_subhead"] * SS, 500, 14)
+            f = profiles.font(p["fs_subhead"] * SS, 500)
             y += int(p["u"] * SS * 1.9)
             # matches the template's `max-width: 24em` on .subhead
             for ln in _wrap_runs([(p["subhead"], False)], f,
                                  min(text_w, int(f.size * 24)), draw):
-                blocks.append(("runs", ln, f, c_sub, 0, y))
+                blocks.append(("runs", ln, f, p["c_subhead"], 0, y, "body"))
                 y += int(p["fs_subhead"] * SS * 1.34)
         if p["kicker"]:
             y += int(p["u"] * SS * 2.6)
-            blocks.append(("rule", None, None, c_rule, text_w, y))
+            blocks.append(("rule", None, None, c_rule, text_w, y, None))
             y += int(p["u"] * SS * 1.5)
-            f = font(p["fs_kicker"] * SS, 700, 14)
-            blocks.append(("track", p["kicker"].upper(), f, c_kick, 0.10, y))
+            f = profiles.font(p["fs_kicker"] * SS, 700)
+            blocks.append(("track", p["kicker"].upper(), f, p["c_kicker"], 0.10, y, "body"))
             y += int(p["fs_kicker"] * SS * 1.2)
         return blocks, y
 
-    logo_f = font(p["fs_logo"] * SS, 800, 32)
+    logo_f = profiles.font(p["fs_logo"] * SS, 800, 32)
     logo_h = int(p["fs_logo"] * SS * 1.0)
-    logo_gap = int(p["u"] * SS * (3.4 if dark else 3.0))
+    logo_gap = int(p["u"] * SS * (3.4 if p["logo_top"] else 3.0))
 
-    art_h = 0
-    if p["layout"] == "stack" and p["art"] != "none":
-        art_h = int(max(frame_h * 0.36, 0)) + int(gut)
+    # The artwork box: a band below the text in `stack`, the column right of
+    # it in `wide`/`split`. The text's vertical budget is the frame minus that
+    # band and its gutter.
+    if p["layout"] == "stack":
+        art_w, art_h = frame_w, int(frame_h * p["stack_art_frac"])
+        art_x, art_y = ix, iy + frame_h - art_h
+    else:
+        art_w, art_h = frame_w - text_w - gut, frame_h
+        art_x, art_y = ix + text_w + gut, iy
+    reserved = art_h + gut if p["layout"] == "stack" and p["art"] != "none" else 0
 
     size = p["fs_headline_max"] * SS
     floor = p["fs_headline_min"] * SS
     blocks, th = build(size)
-    while th + logo_h + logo_gap + art_h > frame_h and size > floor:
+    while th + logo_h + logo_gap + reserved > frame_h and size > floor:
         size -= SS
         blocks, th = build(size)
     if size <= floor:
         warnings.append("headline floored - cut words rather than lowering the floor")
 
     total_h = th + logo_h + logo_gap
-    if p["layout"] == "stack":
-        y0 = iy + max(0, (frame_h - total_h - art_h) // 2)
-    else:
-        y0 = iy + max(0, (frame_h - total_h) // 2)
+    y0 = iy + max(0, (frame_h - total_h - reserved) // 2)
     x0 = ix
+
+    logo_w = (draw.textlength("J33", font=logo_f)
+              + draw.textlength(".AI", font=logo_f))
 
     def logo_at(y):
         x = x0
-        draw.text((x, y), "J33", font=logo_f, fill=c_logo)
+        draw.text((x, y), "J33", font=logo_f, fill=p["c_fg"])
         x += draw.textlength("J33", font=logo_f)
         draw.text((x, y), ".AI", font=logo_f, fill=c_acc)
 
+    # The union of the glyphs, for the manifest. verify.py samples the
+    # background under these boxes rather than under the whole text column,
+    # and holds display type and small text to different contrast bars.
+    ink = {"display": [10 ** 9, 10 ** 9, -10 ** 9, -10 ** 9],
+           "body": [10 ** 9, 10 ** 9, -10 ** 9, -10 ** 9]}
+
+    def seen(cls, x, y, w, h):
+        if cls not in ink:
+            return
+        b = ink[cls]
+        b[0], b[1] = min(b[0], x), min(b[1], y)
+        b[2], b[3] = max(b[2], x + w), max(b[3], y + h)
+
     y = y0
-    if dark:
+    if p["logo_top"]:
         logo_at(y)
+        seen("display", x0, y, logo_w, logo_h)
         y += logo_h + logo_gap
 
     base_y = y
-    for kind, payload, f, col, extra, oy in blocks:
+    for kind, payload, f, col, extra, oy, cls in blocks:
         yy = base_y + oy
         if kind == "runs":
-            _draw_runs(draw, (x0, yy), payload, f, col, c_acc)
+            w = _draw_runs(draw, (x0, yy), payload, f, col, c_acc)
+            seen(cls, x0, yy, w, f.size)
         elif kind == "track":
             x = x0
             tr = f.size * extra
             for ch in payload:
                 draw.text((x, yy), ch, font=f, fill=col)
                 x += draw.textlength(ch, font=f) + tr
+            seen(cls, x0, yy, x - x0, f.size)
         elif kind == "rule":
+            # Not counted as ink: it spans the column by design and is a
+            # hairline at 22%.
             h = max(2 * SS, int(p["u"] * SS * 0.22))
-            draw.rectangle([x0, yy, x0 + extra, yy + h], fill=col)
+            draw_a.rectangle([x0, yy, x0 + extra, yy + h], fill=col)
 
-    if not dark:
-        logo_at(base_y + th + logo_gap)
+    if not p["logo_top"]:
+        ly = base_y + th + logo_gap
+        logo_at(ly)
+        seen("display", x0, ly, logo_w, logo_h)
 
     # ── artwork ──────────────────────────────────────────────────────────────
-    if p["art"] == "diagram" and p["art_svg"]:
-        if p["layout"] == "stack":
-            bw, bh = frame_w, max(1, art_h - int(gut))
-            bx, by = ix, iy + frame_h - bh
+    if p["art"] == "diagram":
+        art, svg_warnings = svgpil.rasterise(
+            p["art_svg"], art_w, art_h,
+            fit_viewbox=p["fit_viewbox"], current_color=p["c_fg"],
+        )
+        warnings.extend(dict.fromkeys(svg_warnings))
+        if art is not None:
+            im.paste(art, (art_x, art_y), art)
+    elif p["art"] == "photo":
+        try:
+            ph = _open_rgb(p["art_img"])
+        except OSError as e:
+            warnings.append(f"art_img could not be opened: {e}")
         else:
-            bw, bh = frame_w - text_w - int(gut), frame_h
-            bx, by = ix + text_w + int(gut), iy
-        art = _rasterise_svg(p["art_svg"], bw, bh)
-        if art is None:
-            warnings.append(
-                "diagram skipped: cairosvg not installed. "
-                "pip install cairosvg, or use the Chromium renderer.")
-        else:
-            im.paste(art, (bx, by), art)
-    elif p["art"] == "code" and p["art_code"]:
-        _draw_code(im, p, ix, iy, frame_w, frame_h, text_w, gut, dark, SS)
+            # the template's `max-width:100%; max-height:100%` on an <img>
+            ph = ImageOps.contain(ph, (art_w, art_h), Image.LANCZOS)
+            im.paste(ph, (art_x + (art_w - ph.width) // 2,
+                          art_y + (art_h - ph.height) // 2))
+    elif p["art"] == "code":
+        warnings.extend(_draw_code(im, draw_a, p, (art_x, art_y, art_w, art_h)))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     final = out_dir / p["out_name"]
-    im.resize((p["w"], p["h"]), Image.LANCZOS).save(final, "PNG", optimize=True)
+    im.resize((p["w"], p["h"]), Image.LANCZOS).save(final, "PNG")
+    text_box = {k: ([int(round(v / SS)) for v in b]
+                    if b[2] > b[0] and b[3] > b[1] else None)
+                for k, b in ink.items()}
     return dict(canvas=canvas, path=final, w=p["w"], h=p["h"],
                 headline_px=round(size / SS, 2), floored=size <= floor,
-                overflow=0, warnings=warnings)
+                warnings=warnings, text_box=text_box, payload=p)
 
 
-def _draw_code(im, p, ix, iy, frame_w, frame_h, text_w, gut, dark, ss):
+def _draw_code(im, draw_a, p, box) -> list[str]:
+    """Draw the code panel inside `box` = (x, y, w, h). Returns warnings."""
+    warn: list[str] = []
     c = p["art_code"]
     lines = c.get("lines", [])
     if not lines:
-        return
-    if p["layout"] == "stack":
-        bx, bw = ix, frame_w
-        bh = int(frame_h * 0.36)
-        by = iy + frame_h - bh
-    else:
-        bx = ix + text_w + int(gut)
-        bw = frame_w - text_w - int(gut)
-        bh = frame_h
-        by = iy
+        return warn
+    bx, by, bw, bh = box
 
-    fs = p["fs_code"] * ss
-    try:
-        mono = ImageFont.truetype("consola.ttf", int(fs))
-    except Exception:
-        mono = font(fs, 500, 14)
+    fs = p["fs_code"] * SS
+    mono = profiles.font(fs, 500, family="mono")
+    if profiles.mono_font_path() is None:
+        # Inter is proportional; code set in it stops looking like code.
+        warn.append("no monospace font on this machine, so `art: code` was set "
+                    "in Inter. Install DejaVu Sans Mono, or use art: diagram.")
 
-    pad = int(p["u"] * ss * 2.5)
+    pad = int(p["u"] * SS * 2.5)
     lh = fs * 1.62
     box_h = min(bh, int(len(lines) * lh + pad * 2 + (fs * 2 if c.get("lang") else 0)))
     box_y = by + (bh - box_h) // 2
+    draw_a.rounded_rectangle([bx, box_y, bx + bw, box_y + box_h],
+                             radius=int(p["u"] * SS * 1.1),
+                             fill=tuple(p["c_code_panel"]),
+                             outline=tuple(p["c_code_edge"]), width=2 * SS)
 
-    ov = Image.new("RGBA", im.size, (0, 0, 0, 0))
-    d = ImageDraw.Draw(ov)
-    fill = (255, 255, 255, 12) if dark else (10, 13, 51, 11)
-    edge = (255, 255, 255, 31) if dark else (10, 13, 51, 36)
-    d.rounded_rectangle([bx, box_y, bx + bw, box_y + box_h],
-                        radius=int(p["u"] * ss * 1.1), fill=fill,
-                        outline=edge, width=2 * ss)
-    im.paste(Image.alpha_composite(im.convert("RGBA"), ov).convert("RGB"), (0, 0))
     d = ImageDraw.Draw(im)
-
     y = box_y + pad
     if c.get("lang"):
-        lf = font(p["fs_kicker"] * ss, 700, 14)
-        d.text((bx + pad, y), c["lang"].upper(), font=lf,
-               fill=(150, 160, 180) if dark else (120, 122, 140))
+        lf = profiles.font(p["fs_kicker"] * SS, 700)
+        d.text((bx + pad, y), c["lang"].upper(), font=lf, fill=tuple(p["c_code_label"]))
         y += int(fs * 2)
     hl = set(c.get("highlight", []))
     for i, ln in enumerate(lines):
-        col = _hex(profiles.PRIMARY) if i in hl else (
-            (230, 237, 246) if dark else _hex(profiles.NAVY))
-        d.text((bx + pad, y), ln, font=mono, fill=col)
+        d.text((bx + pad, y), ln, font=mono,
+               fill=profiles.PRIMARY if i in hl else p["c_code_fg"])
         y += lh
+    return warn
 
 
 def render_all(spec: dict, out_dir: Path, canvases: list[str]) -> list[dict]:

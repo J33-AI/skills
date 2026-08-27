@@ -10,12 +10,18 @@ sandbox. Use --engine to force one.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import compose   # noqa: E402
 import profiles  # noqa: E402
+import render    # noqa: E402
+
+
+MANIFEST = "_kit.json"
 
 
 def to_webp(png: Path, quality: int = 82) -> Path:
@@ -23,6 +29,27 @@ def to_webp(png: Path, quality: int = 82) -> Path:
     dst = png.with_suffix(".webp")
     Image.open(png).convert("RGB").save(dst, "WEBP", quality=quality, method=6)
     return dst
+
+
+def write_manifest(spec: dict, out: Path, engine: str, results: list[dict]) -> dict:
+    """Record what each file is, for verify.py. Returns what was written.
+
+    Without it verify.py guesses the canvas from the filename and the surface
+    from the image's brightness, and a photo plate reads as dark exactly like
+    navy does.
+    """
+    canvases = []
+    for r in results:
+        p = r["payload"]
+        canvases.append({
+            "canvas": r["canvas"], "file": r["path"].name,
+            "surface": p["surface"], "layout": p["layout"], "art": p["art"],
+            "inset_x": p["inset_x"], "inset_y": p["inset_y"],
+            "text_frac": p["text_frac"], "text_box": r["text_box"],
+        })
+    manifest = {"slug": spec["slug"], "engine": engine, "canvases": canvases}
+    (out / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest
 
 
 def main() -> int:
@@ -51,19 +78,17 @@ def main() -> int:
 
     engine = a.engine
     if engine == "auto":
-        import render
         engine = "chromium" if render.available() else "pil"
         if engine == "pil":
             print("note: Chromium unavailable, using the Pillow renderer")
 
     out = Path(a.out)
     if engine == "chromium":
-        import render
         results = render.render_all(spec, out, todo)
     else:
-        import compose
         results = compose.render_all(spec, out, todo)
 
+    write_manifest(spec, out, engine, results)
     print(f"\n{engine} · {len(results)} images -> {out}/\n")
     problems = 0
     for r in results:
@@ -75,14 +100,14 @@ def main() -> int:
             problems += 1
             print("             ! headline hit the minimum size - cut words "
                   "rather than lowering the floor")
-        for w in r.get("warnings", []):
+        for w in r["warnings"]:
             problems += 1
             print(f"             ! {w}")
 
     if a.webp:
         print()
         for r in results:
-            if profiles.CANVASES[r["canvas"]]["website"]:
+            if profiles.CANVASES[r["canvas"]]["webp_kb"]:
                 w = to_webp(r["path"])
                 print(f"  {w.name}  {w.stat().st_size // 1024}KB")
 
