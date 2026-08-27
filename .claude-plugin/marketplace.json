@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "J33-AI shared Claude Code skills",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "plugins": [
     {
@@ -13,6 +13,15 @@
       "source": "./plugins/koboyo",
       "description": "Koboyo (koboyo.com) diagram-as-code: verified DSL syntax for architecture, sequence, ERD, orgchart diagrams + browser rendering workflow",
       "version": "1.2.0",
+      "author": {
+        "name": "J33-AI"
+      }
+    },
+    {
+      "name": "j33-blog-promo-kit",
+      "source": "./plugins/j33-blog-promo-kit",
+      "description": "Turn a J33.AI blog article into a publishing kit: Instagram, X and LinkedIn images plus the website banner and thumbnail at exact dimensions, and the post copy for each channel",
+      "version": "1.0.0",
       "author": {
         "name": "J33-AI"
       }

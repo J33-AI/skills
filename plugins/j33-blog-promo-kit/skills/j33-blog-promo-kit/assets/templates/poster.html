@@ -1,0 +1,361 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+/* ── bundled faces, no network ─────────────────────────────────────────── */
+@font-face{
+  font-family:'Inter';
+  src:url('../fonts/Inter.ttf') format('truetype-variations'),
+      url('../fonts/Inter.ttf') format('truetype');
+  font-weight:100 900; font-style:normal; font-display:block;
+}
+@font-face{
+  font-family:'Anton';
+  src:url('../fonts/Anton-Regular.ttf') format('truetype');
+  font-weight:400; font-style:normal; font-display:block;
+}
+
+/* ── J33.AI tokens (see references/brand.md) ───────────────────────────── */
+:root{
+  --primary:#0099CC;
+  --secondary:#1E3A8A;
+  --navy:#0A0D33;
+  --navy-light:#01102D;
+  --body-light:#94A3B8;
+  --body:#7A7A7A;
+  --paper:#F6F0E2;
+  --photo-dark:#02080F;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#fff}
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:geometricPrecision;
+}
+
+/* ── canvas ─────────────────────────────────────────────────────────────── */
+.poster{
+  position:relative; overflow:hidden;
+  width:var(--w); height:var(--h);
+}
+.bg{position:absolute; inset:0; z-index:0}
+.grain{
+  position:absolute; inset:0; z-index:1; pointer-events:none;
+  mix-blend-mode:multiply; opacity:.30;
+}
+.frame{
+  position:absolute; z-index:2;
+  left:var(--inset-x); right:var(--inset-x);
+  top:var(--inset-y); bottom:var(--inset-y);
+  display:flex; gap:var(--gutter);
+}
+
+/* ── surfaces ───────────────────────────────────────────────────────────── */
+.poster[data-surface="paper"] .bg{background:var(--paper)}
+.poster[data-surface="navy"]  .bg{
+  background:
+    radial-gradient(120% 90% at 78% 108%, rgba(0,153,204,.16) 0%, rgba(0,153,204,0) 60%),
+    linear-gradient(152deg, var(--navy) 0%, var(--navy-light) 100%);
+}
+.poster[data-surface="photo"] .bg{background:var(--photo-dark)}
+.photo{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0}
+.scrim{position:absolute; inset:0; z-index:1}
+.poster[data-surface="photo"] .scrim{
+  background:
+    linear-gradient(90deg, rgba(2,8,15,.94) 0%, rgba(2,8,15,.80) 38%, rgba(2,8,15,0) 68%),
+    linear-gradient(0deg, rgba(10,13,51,.18), rgba(10,13,51,.18));
+}
+
+/* faint technical grid, dark surfaces only */
+.grid{position:absolute; inset:0; z-index:1; opacity:.055}
+.poster[data-surface="paper"] .grid{display:none}
+
+/* ── columns ────────────────────────────────────────────────────────────── */
+.col-text{
+  display:flex; flex-direction:column; justify-content:center;
+  min-width:0; min-height:0;
+}
+.col-art{
+  display:flex; align-items:center; justify-content:center;
+  min-width:0; min-height:0; overflow:hidden;
+}
+/* An inline SVG with a viewBox letterboxes itself via preserveAspectRatio, so
+   giving it the full box and letting it fit inside beats computing a height. */
+.col-art > svg{width:100%; height:100%; display:block}
+.col-art > img{max-width:100%; max-height:100%; display:block}
+
+.poster[data-layout="wide"]  .frame{flex-direction:row; align-items:stretch}
+.poster[data-layout="wide"]  .col-text{flex:0 0 46%}
+.poster[data-layout="wide"]  .col-art {flex:1 1 auto}
+
+.poster[data-layout="split"] .frame{flex-direction:row; align-items:stretch}
+.poster[data-layout="split"] .col-text{flex:0 0 52%}
+.poster[data-layout="split"] .col-art {flex:1 1 auto}
+
+.poster[data-layout="stack"] .frame{flex-direction:column; justify-content:center}
+.poster[data-layout="stack"] .col-text{flex:0 0 auto}
+/* flex-basis 0, not auto: the item then has a definite resolved height, which
+   is what lets the SVG's height:100% compute instead of falling back to
+   intrinsic sizing (and rendering tiny). */
+.poster[data-layout="stack"] .col-art {flex:1 1 0; width:100%; margin-top:var(--gutter); min-height:36%}
+.poster[data-layout="stack"][data-art="none"] .col-art{display:none}
+.poster:not([data-layout="stack"])[data-art="none"] .col-art{display:none}
+.poster:not([data-layout="stack"])[data-art="none"] .col-text{flex:0 0 78%}
+
+/* ── type ───────────────────────────────────────────────────────────────── */
+.eyebrow{
+  font-weight:700; font-size:var(--fs-eyebrow);
+  letter-spacing:.16em; text-transform:uppercase;
+  margin-bottom:calc(var(--u) * 1.6);
+}
+.headline{
+  font-size:var(--fs-headline);
+  line-height:1.08;           /* the brand's display leading */
+  letter-spacing:-.025em;
+  font-weight:900;
+  white-space:pre-line;       /* honours \n in the spec */
+  overflow-wrap:break-word;
+  text-wrap:balance;          /* evens the rag; kills one-word last lines */
+}
+.poster[data-display="anton"] .headline{
+  font-family:'Anton',Impact,sans-serif;
+  font-weight:400; text-transform:uppercase; letter-spacing:.002em; line-height:1.02;
+}
+.subhead{
+  font-size:var(--fs-subhead); line-height:1.34; font-weight:500;
+  margin-top:calc(var(--u) * 1.9); max-width:24em; text-wrap:balance;
+}
+.rule{
+  height:max(2px, calc(var(--u) * .22)); width:100%;
+  margin-top:calc(var(--u) * 2.6); margin-bottom:calc(var(--u) * 1.5);
+}
+.kicker{
+  font-size:var(--fs-kicker); font-weight:700; letter-spacing:.10em;
+  text-transform:uppercase;
+}
+.logo{
+  font-size:var(--fs-logo); font-weight:800; letter-spacing:-.02em; line-height:1;
+}
+.logo .ai{color:var(--primary)}
+
+.logo-top{margin-bottom:calc(var(--u) * 3.4)}
+.logo-bot{margin-top:calc(var(--u) * 3.0)}
+.poster[data-surface="paper"] .logo-top{display:none}
+.poster:not([data-surface="paper"]) .logo-bot{display:none}
+
+/* colour per surface */
+.poster[data-surface="paper"]{color:var(--navy)}
+.poster[data-surface="paper"] .eyebrow{color:var(--primary)}
+.poster[data-surface="paper"] .headline{color:var(--navy)}
+.poster[data-surface="paper"] .subhead{color:#4A4A55}
+.poster[data-surface="paper"] .rule{background:var(--navy)}
+.poster[data-surface="paper"] .kicker{color:var(--navy)}
+.poster[data-surface="paper"] .logo{color:var(--navy)}
+
+.poster[data-surface="navy"],.poster[data-surface="photo"]{color:#fff}
+.poster[data-surface="navy"] .eyebrow,
+.poster[data-surface="photo"] .eyebrow{color:var(--primary)}
+.poster[data-surface="navy"] .headline,
+.poster[data-surface="photo"] .headline{color:#fff}
+.poster[data-surface="navy"] .subhead,
+.poster[data-surface="photo"] .subhead{color:var(--body-light)}
+.poster[data-surface="navy"] .rule,
+.poster[data-surface="photo"] .rule{background:rgba(255,255,255,.22)}
+.poster[data-surface="navy"] .kicker,
+.poster[data-surface="photo"] .kicker{color:var(--body-light)}
+.poster[data-surface="navy"] .logo,
+.poster[data-surface="photo"] .logo{color:#fff}
+
+.accent{color:var(--primary)}
+
+/* ── code artwork ───────────────────────────────────────────────────────── */
+.code{
+  width:100%; border-radius:calc(var(--u) * 1.1);
+  padding:calc(var(--u) * 2.4) calc(var(--u) * 2.6);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:var(--fs-code); line-height:1.62; white-space:pre;
+  overflow:hidden;
+}
+.poster[data-surface="paper"] .code{
+  background:rgba(10,13,51,.045); border:2px solid rgba(10,13,51,.14); color:var(--navy);
+}
+.poster:not([data-surface="paper"]) .code{
+  background:rgba(255,255,255,.045); border:2px solid rgba(255,255,255,.12); color:#E6EDF6;
+}
+.code .hl{color:var(--primary); font-weight:600}
+.code-lang{
+  display:block; font-family:'Inter',sans-serif; font-weight:700;
+  font-size:var(--fs-kicker); letter-spacing:.12em; text-transform:uppercase;
+  opacity:.55; margin-bottom:calc(var(--u) * 1.4);
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function(){
+  const P = window.__PAYLOAD__;
+  const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+  // Wrap the accent phrase in a span. Case-insensitive, first occurrence only —
+  // highlighting every instance turns the headline into a rash of colour.
+  function withAccent(headline, accent){
+    const h = esc(headline);
+    if(!accent) return h;
+    const a = esc(accent);
+    const i = h.toLowerCase().indexOf(a.toLowerCase());
+    if(i < 0) return h;
+    return h.slice(0,i) + '<span class="accent">' + h.slice(i, i+a.length) + '</span>' + h.slice(i+a.length);
+  }
+
+  function codeBlock(c){
+    const lines = (c.lines||[]).map((ln,i) =>
+      (c.highlight||[]).includes(i)
+        ? '<span class="hl">' + esc(ln) + '</span>'
+        : esc(ln)
+    ).join('\n');
+    const lang = c.lang ? '<span class="code-lang">' + esc(c.lang) + '</span>' : '';
+    return '<div class="code">' + lang + lines + '</div>';
+  }
+
+  const grainSVG =
+    "data:image/svg+xml;utf8," + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180">' +
+      '<filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3"/>' +
+      '<feColorMatrix type="saturate" values="0"/></filter>' +
+      '<rect width="180" height="180" filter="url(#n)" opacity="0.42"/></svg>');
+
+  const gridSVG =
+    "data:image/svg+xml;utf8," + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">' +
+      '<path d="M64 0H0v64" fill="none" stroke="#fff" stroke-width="1"/></svg>');
+
+  const logo = cls => '<div class="logo ' + cls + '">J33<span class="ai">.AI</span></div>';
+
+  let art = '';
+  if(P.art === 'diagram' && P.art_svg)      art = P.art_svg;
+  else if(P.art === 'code' && P.art_code)   art = codeBlock(P.art_code);
+  else if(P.art === 'photo' && P.art_img)   art = '<img src="' + P.art_img + '">';
+
+  const bg = P.surface === 'photo' && P.photo
+    ? '<div class="bg"><img class="photo" src="' + P.photo + '"><div class="scrim"></div></div>'
+    : '<div class="bg"></div>';
+
+  // Every geometry and type value arrives from profiles.py, so the Chromium and
+  // Pillow paths stay in agreement about the layout.
+  const vars = {
+    '--w':          P.w + 'px',
+    '--h':          P.h + 'px',
+    '--u':          P.u + 'px',
+    '--inset-x':    P.inset_x + 'px',
+    '--inset-y':    P.inset_y + 'px',
+    '--gutter':     P.gutter + 'px',
+    '--fs-headline':P.fs_headline_max + 'px',
+    '--fs-eyebrow': P.fs_eyebrow + 'px',
+    '--fs-subhead': P.fs_subhead + 'px',
+    '--fs-kicker':  P.fs_kicker + 'px',
+    '--fs-logo':    P.fs_logo + 'px',
+    '--fs-code':    P.fs_code + 'px'
+  };
+  const styleAttr = Object.entries(vars).map(([k,v]) => k + ':' + v).join(';');
+
+  document.getElementById('root').innerHTML =
+    '<div class="poster" style="' + styleAttr + '"' +
+        ' data-surface="' + P.surface + '" data-layout="' + P.layout +
+        '" data-display="' + (P.display||'inter') + '" data-art="' + (art ? P.art : 'none') + '">' +
+      bg +
+      '<div class="grid" style="background-image:url(\'' + gridSVG + '\');background-size:' +
+          (P.w/22).toFixed(1) + 'px ' + (P.w/22).toFixed(1) + 'px"></div>' +
+      (P.surface === 'paper'
+        ? '<div class="grain" style="background-image:url(\'' + grainSVG + '\')"></div>' : '') +
+      '<div class="frame">' +
+        '<div class="col-text">' +
+          logo('logo-top') +
+          (P.eyebrow ? '<div class="eyebrow">' + esc(P.eyebrow) + '</div>' : '') +
+          '<h1 class="headline">' + withAccent(P.headline, P.accent) + '</h1>' +
+          (P.subhead ? '<div class="subhead">' + esc(P.subhead) + '</div>' : '') +
+          (P.kicker ? '<div class="rule"></div><div class="kicker">' + esc(P.kicker) + '</div>' : '') +
+          logo('logo-bot') +
+        '</div>' +
+        (art ? '<div class="col-art">' + art + '</div>' : '') +
+      '</div>' +
+    '</div>';
+
+  const poster = document.querySelector('.poster');
+  const frame  = document.querySelector('.frame');
+  const col    = document.querySelector('.col-text');
+
+  // ── fit the code block ──────────────────────────────────────────────────
+  // Code is pre-formatted, so a single long line silently clips at the box
+  // edge. Shrink until the longest line fits rather than truncating it.
+  (function(){
+    const code = document.querySelector('.code');
+    if(!code) return;
+    let cs = P.fs_code, guard = 300;
+    const floor = P.fs_code * 0.55;
+    while(code.scrollWidth > code.clientWidth && cs > floor && guard-- > 0){
+      cs -= 0.5;
+      poster.style.setProperty('--fs-code', cs + 'px');
+    }
+    window.__CODE_FIT__ = {size: cs, clipped: code.scrollWidth > code.clientWidth};
+  })();
+
+  // ── tighten the artwork viewBox ─────────────────────────────────────────
+  // Hand-authored SVG almost always carries slack inside its viewBox, and that
+  // slack is dead space that shrinks the drawing. Refit the viewBox to what was
+  // actually drawn. Pad for stroke width and arrow markers, which getBBox()
+  // does not account for.
+  (function(){
+    const s = document.querySelector('.col-art > svg');
+    if(!s || P.fit_viewbox === false) return;
+    try{
+      const b = s.getBBox();
+      if(!(b.width > 0 && b.height > 0)) return;
+      const pad = Math.max(6, Math.max(b.width, b.height) * 0.03);
+      s.setAttribute('viewBox',
+        (b.x - pad) + ' ' + (b.y - pad) + ' ' +
+        (b.width + pad * 2) + ' ' + (b.height + pad * 2));
+    }catch(e){ /* getBBox throws on an empty or detached svg; leave as authored */ }
+  })();
+
+  // ── auto-fit the headline ───────────────────────────────────────────────
+  // Shrink until the text column fits its box. Report the final size so the
+  // caller can warn when we bottomed out — that means "cut words", not
+  // "lower the floor". See references/layouts.md.
+  // In `stack` the artwork shares the vertical budget with the text, so
+  // measuring the text column alone under-reports and the poster silently
+  // overflows its safe inset. Measure the frame.
+  const measure = () => P.layout === 'stack'
+    ? Math.max(frame.scrollHeight, col.scrollHeight + artHeight())
+    : col.scrollHeight;
+  const artEl = document.querySelector('.col-art');
+  const artHeight = () => {
+    if(!artEl) return 0;
+    const gutter = parseFloat(getComputedStyle(artEl).marginTop) || 0;
+    // The SVG letterboxes, so its floor is what the code/img block needs.
+    const inner = artEl.firstElementChild;
+    if(inner && inner.tagName.toLowerCase() === 'svg') return gutter + P.h * 0.16;
+    return gutter + (inner ? inner.scrollHeight : 0);
+  };
+
+  let size = P.fs_headline_max;
+  poster.style.setProperty('--fs-headline', size + 'px');
+  const budget = frame.clientHeight;
+  let guard = 400;
+  while(measure() > budget && size > P.fs_headline_min && guard-- > 0){
+    size -= 1;
+    poster.style.setProperty('--fs-headline', size + 'px');
+  }
+  window.__FIT__ = {
+    size: size,
+    floored: size <= P.fs_headline_min,
+    overflow: Math.max(0, Math.round(measure() - budget))
+  };
+  document.documentElement.setAttribute('data-ready','1');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "j33-blog-promo-kit",
+  "version": "1.0.0",
+  "description": "Turn a J33.AI blog article into a publishing kit: Instagram, X and LinkedIn images plus the website banner and thumbnail at exact dimensions, and the post copy for each channel",
+  "author": {
+    "name": "J33-AI"
+  },
+  "keywords": ["social-media", "content-marketing", "image-generation", "branding", "instagram", "linkedin", "twitter", "blog", "j33"]
+}
