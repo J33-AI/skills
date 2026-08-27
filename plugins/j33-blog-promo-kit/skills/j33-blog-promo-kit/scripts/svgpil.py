@@ -600,6 +600,21 @@ def rasterise(svg_text: str, box_w: int, box_h: int, *, fit_viewbox: bool = True
     if not items:
         return None, warnings + ["art_svg contained nothing drawable"]
 
+    # An unparseable colour draws nothing, which is easy to miss in a diagram.
+    # Name it rather than leaving a hole where a misspelt token was.
+    unparseable = set()
+    for it in items:
+        for key in ("fill", "stroke"):
+            value = str(it["style"].get(key, "")).strip()
+            if not value or value in ("none", "transparent", "currentColor"):
+                continue
+            if _color(value) is None:
+                unparseable.add(value)
+    if unparseable:
+        warnings.append(f"not a colour, so nothing was drawn in it: "
+                        f"{', '.join(sorted(unparseable))}. Diagram colours are "
+                        f"#ACCENT, #INK, or a hex value.")
+
     # Fit to the drawn bounds (the template's getBBox() refit) or to the
     # declared viewBox.
     bounds = _bounds(items)

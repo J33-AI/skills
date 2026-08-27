@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops, ImageColor, ImageDraw
 
 SKILL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL / "scripts"))
@@ -32,8 +32,10 @@ import svgpil             # noqa: E402
 import verify             # noqa: E402
 
 EXAMPLES = SKILL / "assets" / "examples"
-NAVY_SPEC = EXAMPLES / "navy-diagram.json"
-PAPER_SPEC = EXAMPLES / "paper-code.json"
+SIGNAL_SPEC = EXAMPLES / "signal-diagram.json"
+EMBER_SPEC = EXAMPLES / "ember-diagram.json"
+CRIMSON_SPEC = EXAMPLES / "crimson-code.json"
+ALL_SPECS = (SIGNAL_SPEC, EMBER_SPEC, CRIMSON_SPEC)
 
 # The shipped examples, rendered once with Pillow (plus webp and manifest) and
 # shared by the tests that only read them. Tests that mutate a file copy it
@@ -206,11 +208,18 @@ class SvgSubset(unittest.TestCase):
         return svgpil.rasterise(svg, w, h, **kw)
 
     def test_shipped_example_renders_without_warnings(self):
-        spec = json.loads(NAVY_SPEC.read_text(encoding="utf-8"))
-        im, warns = self.rast(spec["art_svg"], 700, 620)
+        spec = json.loads(SIGNAL_SPEC.read_text(encoding="utf-8"))
+        svg = profiles.paint_svg(spec["art_svg"], "#0099CC", "#FFFFFF")
+        im, warns = self.rast(svg, 700, 620)
         self.assertEqual(warns, [])
         self.assertIsNotNone(im)
         self.assertGreater(ink_alpha(im), 0.02)
+
+    def test_unpainted_token_is_reported_not_silently_dropped(self):
+        svg = ('<svg viewBox="0 0 100 100"><rect x="10" y="10" width="80" '
+               'height="80" fill="#ACCENT"/></svg>')
+        _, warns = self.rast(svg)
+        self.assertTrue(any("#ACCENT" in w for w in warns), warns)
 
     def test_malformed_xml_is_reported_not_raised(self):
         im, warns = self.rast("<svg><rect")
@@ -294,19 +303,124 @@ class SvgSubset(unittest.TestCase):
         self.assertGreater(ink_alpha(tight), 0.5)
 
 
+# ── themes ───────────────────────────────────────────────────────────────────
+
+class Themes(TmpDirCase):
+    """The article colours the plate and the accent; the lockup never moves."""
+
+    def payload(self, canvas="banner", **spec):
+        base = {"slug": "s", "headline": "One Two Three"}
+        base.update(spec)
+        return profiles.resolve(
+            profiles.load_spec(write_json(self.out / "spec.json", base)), canvas)
+
+    def test_default_theme_keeps_the_house_palette(self):
+        p = self.payload()
+        self.assertEqual(p["theme"], "signal")
+        self.assertEqual(p["c_accent"], profiles.BRAND_CYAN)
+        self.assertEqual(p["c_dark_from"], "#0A0D33")
+        self.assertEqual(p["c_paper"], "#F6F0E2")
+
+    def test_theme_moves_the_plate_and_the_accent(self):
+        p = self.payload(theme="ember")
+        self.assertEqual(p["c_accent"], "#F26A1B")
+        self.assertEqual((p["c_dark_from"], p["c_dark_to"]),
+                         profiles.THEMES["ember"]["dark"])
+
+    def test_paper_takes_the_deeper_accent(self):
+        dark = self.payload(theme="ember", surface="dark")["c_accent"]
+        paper = self.payload(theme="ember", surface="paper")["c_accent"]
+        self.assertNotEqual(dark, paper)
+        self.assertLess(verify.luminance(ImageColor.getrgb(paper)),
+                        verify.luminance(ImageColor.getrgb(dark)))
+
+    def test_lockup_never_follows_the_theme(self):
+        for theme in profiles.THEMES:
+            with self.subTest(theme):
+                dark = self.payload(theme=theme, surface="dark")
+                paper = self.payload(theme=theme, surface="paper")
+                self.assertEqual(dark["c_logo_ai"], profiles.BRAND_CYAN)
+                self.assertEqual(paper["c_logo_ai"], profiles.BRAND_CYAN)
+                self.assertEqual(dark["c_logo_j33"], "#FFFFFF")
+                self.assertEqual(paper["c_logo_j33"], profiles.NAVY)
+
+    def test_mono_falls_back_to_the_surface_ink(self):
+        self.assertEqual(self.payload(theme="mono", surface="dark")["c_accent"],
+                         "#FFFFFF")
+        self.assertEqual(self.payload(theme="mono", surface="paper")["c_accent"],
+                         profiles.NAVY)
+
+    def test_every_theme_accent_clears_the_lockup(self):
+        """A near-cyan accent would make the '.AI' read as a failed match."""
+        for name, theme in profiles.THEMES.items():
+            for accent in theme["accent"] or ():
+                with self.subTest(f"{name}/{accent}"):
+                    self.assertFalse(profiles.clashes_with_lockup(accent))
+
+    def test_navy_is_still_accepted_as_a_surface_name(self):
+        self.assertEqual(self.payload(surface="navy")["surface"], "dark")
+
+    def test_unknown_theme_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "unknown theme"):
+            self.payload(theme="neon")
+
+    def test_accent_hex_overrides_the_theme(self):
+        self.assertEqual(self.payload(theme="ember", accent_hex="#7C2A92")["c_accent"],
+                         "#7C2A92")
+
+    def test_accent_hex_too_near_the_lockup_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "degrees of the lockup"):
+            self.payload(accent_hex="#00B4C8")
+
+    def test_accent_hex_that_is_not_a_colour_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "not a colour"):
+            self.payload(accent_hex="ember")
+
+    def test_near_grey_accents_are_allowed_beside_the_lockup(self):
+        # slate sits at a cyan-ish hue but is too desaturated to compete.
+        self.assertFalse(profiles.clashes_with_lockup("#8E97A3"))
+
+    def test_diagram_tokens_take_the_render_colours(self):
+        svg = '<svg viewBox="0 0 10 10"><rect fill="#INK" stroke="#ACCENT"/></svg>'
+        dark = self.payload(theme="crimson", surface="dark",
+                            art="diagram", art_svg=svg)["art_svg"]
+        self.assertIn('fill="#FFFFFF"', dark)
+        self.assertIn('stroke="#E23744"', dark)
+        paper = self.payload(theme="crimson", surface="paper",
+                             art="diagram", art_svg=svg)["art_svg"]
+        self.assertIn(f'fill="{profiles.NAVY}"', paper)
+        self.assertIn('stroke="#B4232F"', paper)
+
+    def test_every_theme_renders_and_verifies_on_both_plates(self):
+        for theme in profiles.THEMES:
+            for surface in ("dark", "paper"):
+                with self.subTest(f"{theme}/{surface}"):
+                    out = self.out / f"{theme}-{surface}"
+                    spec = profiles.load_spec(write_json(self.out / "s.json", {
+                        "slug": theme, "eyebrow": "THEME",
+                        "headline": "A Claim Worth Reading Twice",
+                        "accent": "Worth Reading", "subhead": "One line under it.",
+                        "kicker": "ONE · TWO · THREE",
+                        "theme": theme, "surface": surface, "art": "none"}))
+                    r = compose.render_all(spec, out, ["x"])[0]
+                    entry = kit.write_manifest(spec, out, "pil", [r])["canvases"][0]
+                    issues, _ = verify.check(r["path"], "x", out, entry)
+                    self.assertEqual(issues, [])
+
+
 # ── the Pillow renderer ──────────────────────────────────────────────────────
 
 class PillowRenderer(TmpDirCase):
 
     def test_renders_every_canvas_at_the_exact_size(self):
-        for r in example_kit(NAVY_SPEC)["results"].values():
+        for r in example_kit(SIGNAL_SPEC)["results"].values():
             with self.subTest(r["canvas"]):
                 self.assertEqual(size_of(r["path"]), (r["w"], r["h"]))
                 self.assertEqual(r["warnings"], [])
 
     def test_diagram_reaches_the_artwork_column(self):
         """Assert on ink in the art column, not only on the absence of a warning."""
-        r = example_kit(NAVY_SPEC)["results"]["banner"]
+        r = example_kit(SIGNAL_SPEC)["results"]["banner"]
         art = Image.open(r["path"]).convert("RGB").crop(art_column(r["payload"]))
         self.assertGreater(verify.ink_fraction(art), 0.004)
         self.assertEqual(r["warnings"], [])
@@ -329,7 +443,7 @@ class PillowRenderer(TmpDirCase):
         self.assertGreater(strong_red.histogram()[255], area * 0.5)
 
     def test_reports_the_glyph_box_for_both_size_classes(self):
-        r = example_kit(NAVY_SPEC)["results"]["banner"]
+        r = example_kit(SIGNAL_SPEC)["results"]["banner"]
         box = r["text_box"]
         self.assertIsNotNone(box["display"])
         self.assertIsNotNone(box["body"])
@@ -346,7 +460,7 @@ class PillowRenderer(TmpDirCase):
 class Manifest(unittest.TestCase):
 
     def test_manifest_describes_every_rendered_file(self):
-        k = example_kit(PAPER_SPEC)
+        k = example_kit(CRIMSON_SPEC)
         on_disk = json.loads((k["out"] / kit.MANIFEST).read_text(encoding="utf-8"))
         self.assertEqual(on_disk, k["manifest"])
         self.assertEqual([c["canvas"] for c in on_disk["canvases"]], profiles.ORDER)
@@ -355,7 +469,7 @@ class Manifest(unittest.TestCase):
                 self.assertTrue((k["out"] / entry["file"]).is_file())
                 self.assertEqual(entry["surface"], "paper")
                 self.assertIn("text_box", entry)
-        # paper-code drops the artwork on the two portrait canvases.
+        # crimson-code drops the artwork on the two portrait canvases.
         art = {c["canvas"]: c["art"] for c in on_disk["canvases"]}
         self.assertEqual(art["instagram"], "none")
         self.assertEqual(art["banner"], "code")
@@ -366,7 +480,7 @@ class Manifest(unittest.TestCase):
 class VerifyPositive(TmpDirCase):
 
     def test_examples_pass_every_check(self):
-        for spec_path in (NAVY_SPEC, PAPER_SPEC):
+        for spec_path in ALL_SPECS:
             k = example_kit(spec_path)
             for entry in k["manifest"]["canvases"]:
                 with self.subTest(f"{spec_path.name}/{entry['canvas']}"):
@@ -375,7 +489,7 @@ class VerifyPositive(TmpDirCase):
                     self.assertEqual(issues, [])
 
     def test_verify_still_maps_files_without_a_manifest(self):
-        shutil.copytree(example_kit(NAVY_SPEC)["out"], self.out, dirs_exist_ok=True)
+        shutil.copytree(example_kit(SIGNAL_SPEC)["out"], self.out, dirs_exist_ok=True)
         (self.out / kit.MANIFEST).unlink()
         argv = sys.argv
         sys.argv = ["verify", str(self.out)]
@@ -397,7 +511,7 @@ class VerifyNegative(TmpDirCase):
     def banner_copy(self) -> tuple[Path, dict]:
         """A private copy of the navy example's banner PNG (no webp) and its
         manifest entry, to break without touching the shared kit."""
-        k = example_kit(NAVY_SPEC)
+        k = example_kit(SIGNAL_SPEC)
         src = k["results"]["banner"]["path"]
         dst = self.out / src.name
         shutil.copy(src, dst)
@@ -440,6 +554,28 @@ class VerifyNegative(TmpDirCase):
         issues, _ = verify.check(path, "banner", self.out, entry)
         self.assertTrue(any("below the" in i for i in issues), issues)
 
+    def test_recoloured_lockup_is_caught(self):
+        """The ".AI" keeps the brand cyan whatever the theme."""
+        spec = profiles.load_spec(EMBER_SPEC)
+        r = compose.render_all(spec, self.out, ["banner"])[0]
+        entry = kit.write_manifest(spec, self.out, "pil", [r])["canvases"][0]
+        clean, _ = verify.check(r["path"], "banner", self.out, entry)
+        self.assertEqual([i for i in clean if "lockup" in i], [],
+                         "control render should carry the brand cyan")
+
+        # Repaint the cyan in the theme's orange, as a themed lockup would be.
+        with Image.open(r["path"]) as src:
+            im = src.convert("RGB")
+        target = ImageColor.getrgb(profiles.BRAND_CYAN)
+        mask = Image.merge("RGB", [
+            ch.point(lambda x, v=v: 255 if abs(x - v) <= 12 else 0)
+            for ch, v in zip(im.split(), target)]).convert("L").point(
+                lambda x: 255 if x > 250 else 0)
+        im.paste(ImageColor.getrgb("#F26A1B"), mask=mask)
+        im.save(r["path"])
+        issues, _ = verify.check(r["path"], "banner", self.out, entry)
+        self.assertTrue(any("lockup" in i for i in issues), issues)
+
     def test_wrong_dimensions_are_caught(self):
         path, entry = self.banner_copy()
         with Image.open(path) as im:
@@ -474,41 +610,55 @@ class VerifyNegative(TmpDirCase):
 
 @unittest.skipUnless(render.available(), "Playwright/Chromium not installed")
 class EngineParity(unittest.TestCase):
-    """One Chromium render of the navy example, shared by both tests."""
+    """Every shipped example through Chromium, rendered once for both tests."""
 
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
-        cls.out = Path(cls.tmp.name)
-        spec = profiles.load_spec(NAVY_SPEC)
-        cls.results = render.render_all(spec, cls.out, profiles.ORDER)
-        for r in cls.results:
-            if profiles.CANVASES[r["canvas"]]["webp_kb"]:
-                kit.to_webp(r["path"])
-        cls.manifest = kit.write_manifest(spec, cls.out, "chromium", cls.results)
+        cls.kits = {}
+        for spec_path in ALL_SPECS:
+            out = Path(cls.tmp.name) / spec_path.stem
+            spec = profiles.load_spec(spec_path)
+            results = render.render_all(spec, out, profiles.ORDER)
+            for r in results:
+                if profiles.CANVASES[r["canvas"]]["webp_kb"]:
+                    kit.to_webp(r["path"])
+            cls.kits[spec_path] = dict(
+                out=out, results=results,
+                manifest=kit.write_manifest(spec, out, "chromium", results))
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
     def test_both_engines_produce_the_same_kit(self):
-        pil = example_kit(NAVY_SPEC)["results"]
-        self.assertEqual([r["canvas"] for r in self.results], list(pil))
-        for a in self.results:
-            b = pil[a["canvas"]]
-            with self.subTest(a["canvas"]):
-                self.assertEqual(a["path"].name, b["path"].name)
-                self.assertEqual(size_of(a["path"]), size_of(b["path"]))
-                for kind in ("display", "body"):
-                    self.assertIsNotNone(a["text_box"][kind])
-                    self.assertIsNotNone(b["text_box"][kind])
+        for spec_path, k in self.kits.items():
+            pil = example_kit(spec_path)["results"]
+            self.assertEqual([r["canvas"] for r in k["results"]], list(pil))
+            for a in k["results"]:
+                b = pil[a["canvas"]]
+                with self.subTest(f"{spec_path.stem}/{a['canvas']}"):
+                    self.assertEqual(a["path"].name, b["path"].name)
+                    self.assertEqual(size_of(a["path"]), size_of(b["path"]))
+                    for kind in ("display", "body"):
+                        self.assertIsNotNone(a["text_box"][kind])
+                        self.assertIsNotNone(b["text_box"][kind])
 
     def test_chromium_output_passes_verification(self):
-        for entry in self.manifest["canvases"]:
-            with self.subTest(entry["canvas"]):
-                issues, _ = verify.check(self.out / entry["file"], entry["canvas"],
-                                         self.out, entry)
-                self.assertEqual(issues, [])
+        for spec_path, k in self.kits.items():
+            for entry in k["manifest"]["canvases"]:
+                with self.subTest(f"{spec_path.stem}/{entry['canvas']}"):
+                    issues, _ = verify.check(k["out"] / entry["file"],
+                                             entry["canvas"], k["out"], entry)
+                    self.assertEqual(issues, [])
+
+    def test_chromium_keeps_the_lockup_cyan_on_a_themed_kit(self):
+        """The template must not let the theme reach the '.AI'."""
+        for r in self.kits[EMBER_SPEC]["results"]:
+            with self.subTest(r["canvas"]):
+                with Image.open(r["path"]) as im:
+                    px = verify.brand_cyan_pixels(im.convert("RGB"))
+                self.assertGreater(px, verify.LOCKUP_MIN_PIXELS)
 
 
 if __name__ == "__main__":

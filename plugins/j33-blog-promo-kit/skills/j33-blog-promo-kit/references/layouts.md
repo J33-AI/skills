@@ -17,7 +17,9 @@ One JSON file drives all five renders. Write it, render, look, adjust.
   "kicker":   "MCP · ENTRA ID · POSTGRES",       // optional, dotted meta line
 
   // ── look ────────────────────────────────────────────────────────────────
-  "surface":  "navy",        // paper | navy | photo (default navy)
+  "surface":  "dark",        // paper | dark | photo (default dark)
+  "theme":    "crimson",     // see references/brand.md (default signal)
+  "accent_hex": "#7C2A92",   // optional one-off, overrides the theme's accent
   "display":  "inter",       // inter | anton   (anton is caps-only)
   "photo":    "path/to.jpg", // required when surface = photo
 
@@ -40,7 +42,7 @@ One JSON file drives all five renders. Write it, render, look, adjust.
 }
 ```
 
-Only `slug` and `headline` are required.
+Only `slug` and `headline` are required. `surface: navy` still works and means `dark`.
 
 `overrides` exists because a headline that reads well across a 1600px banner often needs
 a manual line break on a 1080px portrait canvas, and because artwork that works in
@@ -62,10 +64,14 @@ Real SVG describing the article's actual system.
 
 - `viewBox` of `0 0 600 420` for `split`/`wide`, `0 0 600 480` for `stack`. The renderer
   scales it; author in those coordinates.
-- Strokes: `#0A0D33` on `paper`, `#FFFFFF` on `navy`/`photo`. Width `2.5`–`3`.
+- Strokes: `#INK`, which the renderer swaps for `#0A0D33` on `paper` and `#FFFFFF` on
+  `dark`/`photo`. Width `2.5`–`3`.
 - Node fills: none, or the surface colour. Outlined boxes, not filled blocks.
 - Numeric values, labels that carry the payload, and the single most important arrow:
-  `#0099CC`.
+  `#ACCENT`, which the renderer swaps for the theme's accent on the plate in use.
+- Write the tokens, not hex. A drawing with hex in it only works on one theme, and the
+  same SVG has to render on five canvases across both plates. An unrecognised colour
+  draws nothing and is named in the warnings.
 - Corner radius `10` on node rectangles.
 - Labels in Inter 600 at `18`–`22` units. Monospace for anything that is literally code.
 - Dashed strokes (`stroke-dasharray="6 6"`) for the "not yet computed" or "blocked" parts.
@@ -96,19 +102,19 @@ Worked example, the boundary from the ChatGPT/Postgres article:
 
 ```svg
 <svg viewBox="0 0 600 420" xmlns="http://www.w3.org/2000/svg">
-  <g fill="none" stroke="#FFFFFF" stroke-width="2.5">
+  <g fill="none" stroke="#INK" stroke-width="2.5">
     <rect x="150" y="10"  width="300" height="64" rx="10"/>
     <rect x="150" y="118" width="300" height="64" rx="10"/>
-    <rect x="150" y="226" width="300" height="64" rx="10" stroke="#0099CC"/>
+    <rect x="150" y="226" width="300" height="64" rx="10" stroke="#ACCENT"/>
     <rect x="150" y="334" width="300" height="64" rx="10"/>
   </g>
-  <g stroke="#FFFFFF" stroke-width="2.5" marker-end="url(#a)">
+  <g stroke="#INK" stroke-width="2.5" marker-end="url(#a)">
     <path d="M300 74 v44"/><path d="M300 182 v44"/><path d="M300 290 v44"/>
   </g>
-  <g font-family="Inter" font-weight="600" font-size="20" fill="#FFFFFF" text-anchor="middle">
+  <g font-family="Inter" font-weight="600" font-size="20" fill="#INK" text-anchor="middle">
     <text x="300" y="49">ChatGPT</text>
     <text x="300" y="157">Microsoft Entra ID</text>
-    <text x="300" y="265" fill="#0099CC">Custom MCP server</text>
+    <text x="300" y="265" fill="#ACCENT">Custom MCP server</text>
     <text x="300" y="373">PostgreSQL</text>
   </g>
 </svg>
@@ -154,6 +160,7 @@ puts a photograph behind everything.
   "subhead": "Every audit found it. No budget line ever did.",
   "kicker": "INFRA · OWNERSHIP · RISK",
   "surface": "photo",
+  "theme": "slate",
   "art": "none",
   "photo": "shots/rack-corner.jpg"
 }
@@ -164,7 +171,7 @@ puts a photograph behind everything.
   half of the canvas.
 - Brightness matters more than composition. The scrim holds white type over a bright
   photograph, but a blown-out sky in the text half will still fail. If `verify.py` flags
-  contrast, crop to a darker part of the frame or use `navy`. Do not thin the scrim.
+  contrast, crop to a darker part of the frame or use `dark`. Do not thin the scrim.
 
 ## Choosing per canvas
 

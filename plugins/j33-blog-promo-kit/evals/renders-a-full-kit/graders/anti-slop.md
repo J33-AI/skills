@@ -10,9 +10,10 @@ Fail if any of these appear:
   a handshake, or an up-and-to-the-right arrow.
 - Any attempt to render the headline, or any other lettering, with an image
   model instead of the text engine.
-- More than one accent colour, or a colour that is not in the brand token list
-  (`#0099CC`, `#1E3A8A`, `#0A0D33`, `#01102D`, `#94A3B8`, `#F5F5F5`, `#F6F0E2`,
-  `#02080F`).
+- More than one accent colour beside the lockup, or a colour that comes from neither
+  the spec's theme nor the fixed tokens in `references/brand.md`.
+- A recoloured lockup. The `.AI` is `#0099CC` on every theme; the `J33` is `#0A0D33` on
+  a light plate and `#FFFFFF` on a dark one.
 - A headline longer than about eight words, or one that names a topic
   ("Understanding Distributed Retries") instead of making a claim.
 

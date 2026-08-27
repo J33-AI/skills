@@ -5,10 +5,12 @@
 Per file: exact pixel size; whether content survives the display crop (the
 banner's 7:3, Instagram's 1:1 grid); contrast of the surface's text colour
 against the background under the glyphs, 3:1 for display type and 4.5:1 for
-smaller text; and .webp weight against the budget.
+smaller text; that the lockup still carries the brand cyan; and .webp weight
+against the budget.
 
 Reads `_kit.json` when kit.py has written one. Without it the canvas is
-guessed from the filename and the surface from the image, and it says so.
+guessed from the filename, the surface from the image, the accent falls back
+to the brand cyan, and it says so.
 
 Writes `_crop-<name>.png` previews of what the viewer gets.
 
@@ -22,7 +24,7 @@ import json
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageColor, ImageFilter, ImageStat
+from PIL import Image, ImageChops, ImageColor, ImageFilter, ImageStat
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -68,13 +70,23 @@ def text_boxes(im: Image.Image, info: dict) -> dict:
     return {"column": [x0, y0, x1, y1]}
 
 
-def worst_background(im: Image.Image, box, fg, samples: int = 24):
+# A column whose median barely contrasts with the type colour is a stem, not a
+# background. Heavy display faces produce those, and reading one as background
+# invents a failure.
+GLYPH_COLUMN = 1.5
+
+
+def worst_background(im: Image.Image, box, fg, ink=(), samples: int = 24):
     """The least favourable background colour under `box`.
 
     Samples columns across the box and takes each column's median down it:
-    glyphs are a minority of any column's height, so the median lands on the
-    background behind them. A border ring would read the photograph instead
-    of the scrim.
+    glyphs are usually a minority of a column's height, so the median lands on
+    the background behind them. A border ring would read the photograph
+    instead of the scrim. Columns that come back as solid glyph are set aside
+    and used only if every column does.
+
+    `ink` names the other type colours on the canvas; an accent word is a stem
+    too, and it is not the colour of `fg`.
 
     Returns (rgb, x) for the column that contrasts worst with `fg`.
     """
@@ -84,14 +96,17 @@ def worst_background(im: Image.Image, box, fg, samples: int = 24):
     if x1 - x0 < 2 or y1 - y0 < 2:
         return background_of(im), x0
 
-    worst, worst_x, worst_c = None, x0, float("inf")
+    glyph_colours = (fg, *ink)
+    background, every = [], []
     step = max(1, (x1 - x0) // samples)
     for x in range(x0, x1, step):
         col = im.crop((x, y0, x + 1, y1))
         med = tuple(int(v) for v in ImageStat.Stat(col).median[:3])
-        c = contrast(fg, med)
-        if c < worst_c:
-            worst, worst_x, worst_c = med, x, c
+        every.append((contrast(fg, med), med, x))
+        if all(contrast(colour, med) >= GLYPH_COLUMN for colour in glyph_colours):
+            background.append(every[-1])
+
+    _, worst, worst_x = min(background or every)
     return worst, worst_x
 
 
@@ -110,6 +125,20 @@ def ink_fraction(im: Image.Image, thresh: int = 60) -> float:
     hist = g.histogram()
     total = sum(hist)
     return sum(hist[thresh:]) / total if total else 0.0
+
+
+# The lockup on the smallest canvas lays down about 630 cyan pixels, so a count
+# this low means the ".AI" was recoloured or dropped.
+LOCKUP_MIN_PIXELS = 120
+
+
+def brand_cyan_pixels(im: Image.Image, tolerance: int = 12) -> int:
+    """Count pixels carrying the lockup's cyan, within `tolerance` per channel."""
+    target = ImageColor.getrgb(profiles.BRAND_CYAN)
+    near = [ch.point(lambda x, v=v: 255 if abs(x - v) <= tolerance else 0)
+            for ch, v in zip(im.split(), target)]
+    return ImageChops.darker(ImageChops.darker(*near[:2]),
+                             near[2]).histogram()[255]
 
 
 def check(path: Path, canvas: str, out_dir: Path,
@@ -168,29 +197,36 @@ def check(path: Path, canvas: str, out_dir: Path,
     # Which type colour to test depends on the surface. The manifest names it;
     # without one, read it off the background: paper is light and takes navy
     # type, navy and photo are dark and take white.
-    surface = info.get("surface")
-    if surface is None:
-        surface = "paper" if luminance(background_of(im)) > 0.5 else "navy"
+    surface = profiles.surface_name(info.get("surface"))
+    if not info.get("surface"):
+        surface = "paper" if luminance(background_of(im)) > 0.5 else "dark"
     fg_hex = profiles.SURFACES[surface]["fg"]
     fg = ImageColor.getrgb(fg_hex)
+
+    # The theme colours everything but the lockup, which keeps the brand cyan.
+    accent_hex = info.get("accent") or profiles.BRAND_CYAN
+    if brand_cyan_pixels(im) < LOCKUP_MIN_PIXELS:
+        issues.append(f"the lockup's cyan ({profiles.BRAND_CYAN}) is missing - "
+                      f"the '.AI' keeps the brand colour on every theme")
 
     # WCAG puts large text at 3:1 and everything else at 4.5:1; the headline
     # here is four to six times the size of the eyebrow.
     bars = {"display": (3.0, "display type"), "body": (4.5, "small text"),
             "column": (4.5, "text")}
+    accent = ImageColor.getrgb(accent_hex)
     for kind, box in sorted(text_boxes(im, info).items()):
         floor, label = bars.get(kind, (4.5, kind))
-        bg, bg_x = worst_background(im, box, fg)
+        bg, bg_x = worst_background(im, box, fg, ink=(accent,))
         ratio = contrast(fg, bg)
         if ratio < floor:
             issues.append(f"{label} ({fg_hex}) is {ratio:.1f}:1 against the "
                           f"background at x={bg_x}, below the {floor}:1 minimum")
         if kind != "display":
             continue
-        cc = contrast(ImageColor.getrgb(profiles.PRIMARY), bg)
+        cc = contrast(accent, bg)
         if cc < 3.0:
-            notes.append(f"accent cyan is {cc:.1f}:1 at x={bg_x} - fine for a "
-                         f"display headline, too low for small text")
+            notes.append(f"the accent ({accent_hex}) is {cc:.1f}:1 at x={bg_x} - "
+                         f"fine for a display headline, too low for small text")
 
     # The website files ship as .webp, so the budget applies to those.
     budget = c["webp_kb"]

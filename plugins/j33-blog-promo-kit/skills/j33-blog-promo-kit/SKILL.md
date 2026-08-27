@@ -49,15 +49,39 @@ this repo).
 
 | Surface | Use when | Looks like |
 | ------- | -------- | ---------- |
-| `paper` | The article explains a mechanism you can draw | Cream `#F6F0E2`, navy display type, outlined diagram, cyan values |
-| `navy`  | Security, infrastructure, architecture, anything with a threat model | `#0A0D33` → `#01102D`, white type, cyan accent |
-| `photo` | You have a real photograph and the topic is physical | Photo under a navy scrim, white and cyan type |
+| `paper` | The article explains a mechanism you can draw | Cream plate, navy display type, outlined diagram |
+| `dark`  | Security, infrastructure, architecture, anything with a threat model | Deep plate, white type, accent bloom |
+| `photo` | You have a real photograph and the topic is physical | Photo under a tinted scrim, white type |
 
-Prefer `paper` when there is a mechanism to draw. Use `navy` when there is not. Use
+Prefer `paper` when there is a mechanism to draw. Use `dark` when there is not. Use
 `photo` only with a real photograph; a generated stock plate is the look this skill
 exists to avoid.
 
-### 3. Write the spec
+### 3. Choose a theme
+
+The theme colours the plate and the accent, so one article does not look like the last
+one. The `J33.AI` lockup keeps the brand cyan whatever you pick, which is what lets the
+rest move.
+
+| Theme     | For                                    |
+| --------- | -------------------------------------- |
+| `signal`  | AI integration, MCP, platform work     |
+| `crimson` | Security, breaches, threat models      |
+| `ember`   | Incidents, outages, postmortems        |
+| `gold`    | Cost, billing, spend, waste            |
+| `citron`  | Data, analytics, benchmarks            |
+| `moss`    | Reliability, savings realised, results |
+| `violet`  | Models, evals, research                |
+| `plum`    | Strategy, opinion, positioning         |
+| `magenta` | Launches, releases, announcements      |
+| `slate`   | Compliance, governance, procurement    |
+| `mono`    | Manifestos, pure-argument pieces       |
+
+Pick on the article's subject, not its mood: a calm postmortem is still `ember`. When two
+themes both fit, use `signal` — the house look is never the wrong answer. Every part of a
+series shares one theme. `references/brand.md` has the palettes.
+
+### 4. Write the spec
 
 One JSON file drives all five renders. `references/layouts.md` has every field and the
 art modes.
@@ -70,7 +94,8 @@ art modes.
   "accent": "Never",
   "subhead": "A prompt is a suggestion, not a security control",
   "kicker": "MCP · ENTRA ID · POSTGRES",
-  "surface": "navy",
+  "surface": "dark",
+  "theme": "crimson",
   "display": "inter",
   "art": "diagram",
   "art_svg": "<svg …>"
@@ -80,10 +105,10 @@ art modes.
 Headline: under 8 words, and a claim rather than a topic. "ChatGPT Should Never Touch
 Your Database" works; "Understanding Enterprise AI Integration" does not.
 
-`accent` is the word or phrase that turns cyan: the word carrying the argument, one per
-image.
+`accent` is the word or phrase that takes the theme's colour: the word carrying the
+argument, one per image.
 
-### 4. Render
+### 5. Render
 
 ```bash
 python scripts/kit.py --spec spec.json --out out/ --webp
@@ -92,7 +117,7 @@ python scripts/kit.py --spec spec.json --out out/ --webp
 Uses Chromium when Playwright is installed, Pillow otherwise. `--engine pil` forces
 Pillow. `--webp` also writes `.webp` for the two website files.
 
-### 5. Verify
+### 6. Verify
 
 ```bash
 python scripts/verify.py out/
@@ -105,7 +130,7 @@ exact dimensions and webp weight, and writes `_crop-<name>.png` previews of the 
 Then look at the PNGs with the Read tool. The script cannot see a bad line break or a
 diagram colliding with the logo.
 
-### 6. Write the copy
+### 7. Write the copy
 
 Follow `references/social-copy.md`: per-platform limits, structure, and the tells of
 machine writing. Write `copy.md` into the output folder in the J33.AI "we" voice the
@@ -119,7 +144,8 @@ Never in an image:
 - Holographic UI, lens flares, particle swarms, binary rain, hexagon grids
 - Handshakes, up-and-to-the-right arrows, "digital transformation" swooshes
 - Text from an image model, in any quantity
-- More than one accent colour, or any colour outside `references/brand.md`
+- More than one accent colour beside the lockup, or a colour outside the theme
+- A recoloured lockup: the `.AI` is `#0099CC` on every theme
 - Faces or logos you do not have rights to
 
 Always:
@@ -148,13 +174,13 @@ roughly 90–130px on a 1600px canvas. If it has to shrink below ~70px to fit, c
   changing anything under `scripts/`
 - `assets/templates/poster.html`: the layout both renderers follow
 - `assets/fonts/`: Inter (variable) and Anton, bundled
-- `assets/examples/`: `navy-diagram.json` and `paper-code.json`, both rendered and
-  checked. Copy one rather than starting blank
+- `assets/examples/`: `signal-diagram.json`, `ember-diagram.json` and
+  `crimson-code.json`, all rendered and checked. Copy one rather than starting blank
 
 ## Without Chromium
 
 Fonts are bundled and nothing touches the network. Without Chromium (ChatGPT's sandbox,
-most CI) `kit.py` uses Pillow. Two differences: the navy gradient is vertical rather than
+most CI) `kit.py` uses Pillow. Two differences: the dark gradient is vertical rather than
 angled, and `art: diagram` renders the SVG subset listed in `references/layouts.md`.
 Anything outside it is named in the warnings; author to the subset, or render that canvas
 through Chromium.

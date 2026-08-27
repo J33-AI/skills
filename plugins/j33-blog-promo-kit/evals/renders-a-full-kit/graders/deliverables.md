@@ -20,6 +20,9 @@ Pass only if all of these hold.
 5. `verify.py` was run against `out/` and its final report showed no
    outstanding issues. If it reported issues, the agent fixed them and re-ran
    it rather than explaining them away.
+6. The spec names a `theme`. `ember`, `moss`, `slate`, `crimson` and `signal`
+   all fit a postmortem about a broken retry counter; `magenta` and `gold` do
+   not.
 
 Fail if the agent produced fewer than five images, hand-waved a dimension, or
 declared success without running the verifier.

@@ -70,7 +70,8 @@ When `surface: photo`, the photograph alone will not hold white text. In order:
 
 1. The photograph, `object-fit: cover`, centred on its subject.
 2. A scrim in `#02080F`, whose direction depends on the layout.
-3. A flat `#0A0D33` overlay at 18% across the whole frame, to pull the photo toward brand.
+3. A flat overlay of the theme's deep plate at 18% across the whole frame, to pull the
+   photograph toward the rest of the kit.
 
 The scrim has to be opaque wherever type lands, and type lands in different places per
 layout:
@@ -95,9 +96,10 @@ check to a note, because edge energy cannot tell a photograph's texture from typ
 
 ## The manifest
 
-`kit.py` writes `_kit.json` beside the images: for each file, its canvas, surface, layout,
-insets, and the box the glyphs occupy. `verify.py` reads it. Without it the verifier
-guesses the canvas from the filename and the surface from the image, and says so.
+`kit.py` writes `_kit.json` beside the images: for each file, its canvas, surface, theme,
+accent, layout, insets, and the box the glyphs occupy. `verify.py` reads it. Without it
+the verifier guesses the canvas from the filename and the surface from the image, falls
+back to the brand cyan for the accent, and says so.
 
 ## Rendering fidelity
 

@@ -1,7 +1,7 @@
 # Why ChatGPT Should Never Touch Your Database Directly — social kit
 
 A worked example of the `copy.md` output. Written for the article in
-`navy-diagram.json`. Character counts are measured, not estimated.
+`signal-diagram.json`. Character counts are measured, not estimated.
 
 ---
 

@@ -1,7 +1,7 @@
 """Pillow renderer, used when Chromium is not available.
 
 Geometry, type scales and colours come from profiles.py, so the layout matches
-the Chromium path. Two known differences: the navy gradient is vertical rather
+the Chromium path. Two known differences: the dark gradient is vertical rather
 than angled, and `art: diagram` goes through svgpil.py, which renders the SVG
 subset in references/layouts.md and warns about anything outside it.
 
@@ -100,10 +100,12 @@ def _surface(p: dict, W: int, H: int) -> tuple[Image.Image, list[str]]:
     s = p["surface"]
     warn: list[str] = []
     if s == "paper":
-        im = Image.new("RGB", (W, H), profiles.PAPER)
+        im = Image.new("RGB", (W, H), p["c_paper"])
+        # The grain is the plate itself, darkened, so it follows the theme.
+        grain = tuple(int(v * 0.87) for v in ImageColor.getrgb(p["c_paper"])[:3])
         noise = Image.effect_noise((W, H), 14).convert("L")
         im = Image.composite(
-            Image.new("RGB", (W, H), (214, 205, 186)), im,
+            Image.new("RGB", (W, H), grain), im,
             noise.point(lambda v: 40 if v > 150 else 0),
         )
         return im, warn
@@ -141,18 +143,19 @@ def _surface(p: dict, W: int, H: int) -> tuple[Image.Image, list[str]]:
                     a = 0.0
                 sd.line([(x, 0), (x, H)], fill=(r, g, b, int(round(255 * a))))
         base = Image.alpha_composite(base.convert("RGBA"), scrim)
-        tint = Image.new("RGBA", (W, H), (*ImageColor.getrgb(profiles.NAVY), 46))
+        tint = Image.new("RGBA", (W, H), tuple(p["c_photo_tint"]))
         return Image.alpha_composite(base, tint).convert("RGB"), warn
 
-    # navy
-    top, bot = ImageColor.getrgb(profiles.NAVY), ImageColor.getrgb(profiles.NAVY_LIGHT)
+    # dark
+    top = ImageColor.getrgb(p["c_dark_from"])
+    bot = ImageColor.getrgb(p["c_dark_to"])
     im = Image.new("RGB", (W, H))
     d = ImageDraw.Draw(im)
     for y in range(H):
         t = y / max(1, H - 1)
         d.line([(0, y), (W, y)],
                fill=tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3)))
-    # cyan bloom, bottom right, like the CSS radial-gradient. The full glow
+    # Accent bloom, bottom right, like the CSS radial-gradient. The full glow
     # would be 1.7W x 2.0H placed at (0.30W, 0.30H); only its top-left corner
     # lands on the canvas, so build just that.
     gx, gy = int(W * 0.30), int(H * 0.30)
@@ -162,7 +165,7 @@ def _surface(p: dict, W: int, H: int) -> tuple[Image.Image, list[str]]:
             .resize((vis_w, vis_h), Image.LANCZOS)
             .point(lambda v: max(0, 40 - int(v * 40 / 255))))
     layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    layer.paste(Image.new("RGB", glow.size, profiles.PRIMARY), (gx, gy), glow)
+    layer.paste(Image.new("RGB", glow.size, p["c_accent"]), (gx, gy), glow)
     im = Image.alpha_composite(im.convert("RGBA"), layer).convert("RGB")
     # technical grid
     gl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -191,7 +194,7 @@ def render_one(spec: dict, canvas: str, out_dir: Path) -> dict:
     # they composite over whatever is underneath, photograph included.
     draw_a = ImageDraw.Draw(im, "RGBA")
 
-    c_acc = profiles.PRIMARY
+    c_acc = p["c_accent"]
     c_rule = tuple(p["c_rule"])
 
     frame_w, frame_h = W - 2 * ix, H - 2 * iy
@@ -266,10 +269,11 @@ def render_one(spec: dict, canvas: str, out_dir: Path) -> dict:
               + draw.textlength(".AI", font=logo_f))
 
     def logo_at(y):
+        # Never themed: the lockup is the mark, not an accent.
         x = x0
-        draw.text((x, y), "J33", font=logo_f, fill=p["c_fg"])
+        draw.text((x, y), "J33", font=logo_f, fill=p["c_logo_j33"])
         x += draw.textlength("J33", font=logo_f)
-        draw.text((x, y), ".AI", font=logo_f, fill=c_acc)
+        draw.text((x, y), ".AI", font=logo_f, fill=p["c_logo_ai"])
 
     # The union of the glyphs, for the manifest. verify.py samples the
     # background under these boxes rather than under the whole text column,
@@ -381,7 +385,7 @@ def _draw_code(im, draw_a, p, box) -> list[str]:
     hl = set(c.get("highlight", []))
     for i, ln in enumerate(lines):
         d.text((bx + pad, y), ln, font=mono,
-               fill=profiles.PRIMARY if i in hl else p["c_code_fg"])
+               fill=p["c_accent"] if i in hl else p["c_code_fg"])
         y += lh
     return warn
 

@@ -44,6 +44,7 @@ def write_manifest(spec: dict, out: Path, engine: str, results: list[dict]) -> d
         canvases.append({
             "canvas": r["canvas"], "file": r["path"].name,
             "surface": p["surface"], "layout": p["layout"], "art": p["art"],
+            "theme": p["theme"], "accent": p["c_accent"],
             "inset_x": p["inset_x"], "inset_y": p["inset_y"],
             "text_frac": p["text_frac"], "text_box": r["text_box"],
         })

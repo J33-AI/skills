@@ -17,11 +17,10 @@
 }
 
 /* ── J33.AI tokens (see references/brand.md) ───────────────────────────── */
+/* --brand-cyan belongs to the lockup and no theme touches it. Plate and accent
+   colours arrive per render as --c-* variables from profiles.py. */
 :root{
-  --primary:#0099CC;
-  --navy:#0A0D33;
-  --navy-light:#01102D;
-  --paper:#F6F0E2;
+  --brand-cyan:#0099CC;
   --photo-dark:#02080F;
 }
 
@@ -51,11 +50,11 @@ body{
 }
 
 /* ── surfaces ───────────────────────────────────────────────────────────── */
-.poster[data-surface="paper"] .bg{background:var(--paper)}
-.poster[data-surface="navy"]  .bg{
+.poster[data-surface="paper"] .bg{background:var(--c-paper)}
+.poster[data-surface="dark"]  .bg{
   background:
-    radial-gradient(120% 90% at 78% 108%, rgba(0,153,204,.16) 0%, rgba(0,153,204,0) 60%),
-    linear-gradient(152deg, var(--navy) 0%, var(--navy-light) 100%);
+    radial-gradient(120% 90% at 78% 108%, var(--c-glow) 0%, var(--c-glow-0) 60%),
+    linear-gradient(152deg, var(--c-dark-from) 0%, var(--c-dark-to) 100%);
 }
 .poster[data-surface="photo"] .bg{background:var(--photo-dark)}
 .photo{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0}
@@ -66,12 +65,12 @@ body{
 .poster[data-surface="photo"] .scrim{
   background:
     linear-gradient(90deg, rgba(2,8,15,.94) 0%, rgba(2,8,15,.80) 38%, rgba(2,8,15,0) 68%),
-    linear-gradient(0deg, rgba(10,13,51,.18), rgba(10,13,51,.18));
+    linear-gradient(0deg, var(--c-photo-tint), var(--c-photo-tint));
 }
 .poster[data-surface="photo"][data-layout="stack"] .scrim{
   background:
     linear-gradient(180deg, rgba(2,8,15,.90) 0%, rgba(2,8,15,.62) 100%),
-    linear-gradient(0deg, rgba(10,13,51,.18), rgba(10,13,51,.18));
+    linear-gradient(0deg, var(--c-photo-tint), var(--c-photo-tint));
 }
 
 /* faint technical grid, dark surfaces only */
@@ -146,12 +145,15 @@ body{
 .poster[data-logo="bottom"] .logo-top{display:none}
 .poster[data-logo="top"] .logo-bot{display:none}
 
-/* type colours arrive from profiles.SURFACES as --c-* variables */
+/* type colours arrive from profiles.py as --c-* variables */
 .poster{color:var(--c-fg)}
-.eyebrow,.accent,.logo .ai{color:var(--primary)}
+.eyebrow,.accent{color:var(--c-accent)}
 .subhead{color:var(--c-subhead)}
 .rule{background:var(--c-rule)}
 .kicker{color:var(--c-kicker)}
+/* The lockup is the mark, so it keeps the brand colours whatever the theme. */
+.logo{color:var(--c-logo)}
+.logo .ai{color:var(--brand-cyan)}
 
 /* ── code artwork ───────────────────────────────────────────────────────── */
 .code{
@@ -162,7 +164,7 @@ body{
   overflow:hidden;
   background:var(--c-code-panel); border:2px solid var(--c-code-edge); color:var(--c-code-fg);
 }
-.code .hl{color:var(--primary); font-weight:600}
+.code .hl{color:var(--c-accent); font-weight:600}
 .code-lang{
   display:block; font-family:'Inter',sans-serif; font-weight:700;
   font-size:var(--fs-kicker); letter-spacing:.12em; text-transform:uppercase;
@@ -242,6 +244,14 @@ body{
     '--c-subhead':  P.c_subhead,
     '--c-kicker':   P.c_kicker,
     '--c-rule':     rgba(P.c_rule),
+    '--c-accent':   P.c_accent,
+    '--c-logo':     P.c_logo_j33,
+    '--c-paper':    P.c_paper,
+    '--c-dark-from':P.c_dark_from,
+    '--c-dark-to':  P.c_dark_to,
+    '--c-glow':     rgba(P.c_glow),
+    '--c-glow-0':   rgba([P.c_glow[0], P.c_glow[1], P.c_glow[2], 0]),
+    '--c-photo-tint': rgba(P.c_photo_tint),
     '--c-code-fg':  P.c_code_fg,
     '--c-code-panel': rgba(P.c_code_panel),
     '--c-code-edge':  rgba(P.c_code_edge)
