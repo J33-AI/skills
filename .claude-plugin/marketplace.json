@@ -24,7 +24,16 @@
       "version": "1.0.0",
       "author": {
         "name": "J33-AI"
-      }
+     }
+    },  
+    {  
+      "name": "documentation-generator",
+      "source": "./plugins/documentation-generator",
+      "description": "Generate technical documentation from a codebase — architecture overviews, schema references, API contracts, sequence/flow docs — as .docx with drawn diagrams plus a Markdown mirror",
+      "version": "1.0.0",
+      "author": {
+        "name": "J33-AI"
+     }
     }
   ]
 }
