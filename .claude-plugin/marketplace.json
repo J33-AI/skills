@@ -18,13 +18,22 @@
       }
     },
     {
+      "name": "j33-blog-promo-kit",
+      "source": "./plugins/j33-blog-promo-kit",
+      "description": "Turn a J33.AI blog article into a publishing kit: Instagram, X and LinkedIn images plus the website banner and thumbnail at exact dimensions, and the post copy for each channel",
+      "version": "1.0.0",
+      "author": {
+        "name": "J33-AI"
+     }
+    },  
+    {  
       "name": "documentation-generator",
       "source": "./plugins/documentation-generator",
       "description": "Generate technical documentation from a codebase — architecture overviews, schema references, API contracts, sequence/flow docs — as .docx with drawn diagrams plus a Markdown mirror",
       "version": "1.0.0",
       "author": {
         "name": "J33-AI"
-      }
+     }
     }
   ]
 }

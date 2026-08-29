@@ -1,0 +1,38 @@
+{
+  "slug": "cors-xss-sql-injection-csrf",
+  "eyebrow": "WEB SECURITY",
+  "headline": "Four Web Attacks, Explained By Hand",
+  "accent": "By Hand",
+  "subhead": "The bugs are boring. That is exactly why they still work.",
+  "kicker": "CORS · XSS · SQLI · CSRF",
+  "surface": "paper",
+  "theme": "crimson",
+  "display": "anton",
+  "art": "code",
+  "art_code": {
+    "lang": "python",
+    "lines": [
+      "app.add_middleware(",
+      "    CORSMiddleware,",
+      "    allow_origins=[\"*\"],",
+      "    allow_credentials=True,",
+      ")",
+      "",
+      "def get_user(id):",
+      "    q = f\"SELECT * FROM users WHERE id = {id}\""
+    ],
+    "highlight": [
+      2,
+      3,
+      7
+    ]
+  },
+  "overrides": {
+    "instagram": {
+      "art": "none"
+    },
+    "linkedin": {
+      "art": "none"
+    }
+  }
+}

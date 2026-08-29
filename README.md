@@ -17,6 +17,7 @@ In any Claude Code session:
 ```
 /plugin marketplace add J33-AI/skills
 /plugin install koboyo@j33-skills
+/plugin install j33-blog-promo-kit@j33-skills
 /plugin install documentation-generator@j33-skills
 ```
 
@@ -41,6 +42,7 @@ On first use of the bundled MCP, Claude Code shows the standard "MCP server dete
 | Skill | What it does |
 |---|---|
 | **koboyo** | Diagram-as-code on [koboyo.com](https://koboyo.com): the full verified DSL (nodes, edges, groups, icons, 20 diagram families incl. sequence blocks, ERD crow's-foot, orgchart) plus the battle-tested browser rendering workflow — clean-canvas recipe, generate→export→download-PNG pipeline, layout model. Everything verified by live rendering; includes the traps (flowchart family is single-lane, Cmd+A misses off-viewport shapes, export needs two round-trips) so agents don't rediscover them. |
+| **j33-blog-promo-kit** | Article-to-promo-kit for [j33.ai](https://j33.ai): five images at exact platform sizes (Instagram 1080×1350, X 1600×900, LinkedIn 1200×1200, website banner 1600×873, card 1659×948) plus the social copy per channel. Type is set by a real text engine (Chromium, Pillow fallback), artwork is the article's own diagram or code, brand tokens come from the live site CSS. Includes a verifier for the traps (banner displayed at 7:3, Instagram's 1:1 grid crop, contrast under the glyphs, webp weight budget) so nothing ships cropped or unreadable. |
 | **documentation-generator** | Turns a codebase into documentation an engineer will read and trust — architecture overviews, database schema references, API contracts, sequence/flow documents — as a `.docx` with drawn diagrams plus a Markdown mirror. A document is a Python script that builds the `.docx`, so twenty documents look like one set and a correction is a one-line edit. Ships the house style, per-type outlines, a repo analyser, diagram helpers, and a sixteen-case eval suite covering the failure modes (fabricated schemas, stubs described as working code, padded three-file projects). See [plugins/documentation-generator/README.md](plugins/documentation-generator/README.md). |
 
 **No browser? Still useful.** The DSL sections work standalone — Claude writes the diagram code, you paste it into koboyo.com's `</>` panel yourself (Cmd+Enter to generate). Browser automation (bundled Playwright MCP or Claude in Chrome) is only needed for fully hands-off render + PNG export.
