@@ -1,0 +1,15 @@
+interface:
+  display_name: J33.AI Blog Promo Kit v2
+  short_description: Create five branded images and social copy
+  brand_color: '#0099CC'
+  default_prompt: Use @j33-blog-promo-kit-v2 to turn this J33.AI article into five branded
+    images and platform-ready social copy.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true
