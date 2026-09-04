@@ -47,6 +47,10 @@ On first use of the bundled MCP, Claude Code shows the standard "MCP server dete
 
 **No browser? Still useful.** The DSL sections work standalone — Claude writes the diagram code, you paste it into koboyo.com's `</>` panel yourself (Cmd+Enter to generate). Browser automation (bundled Playwright MCP or Claude in Chrome) is only needed for fully hands-off render + PNG export.
 
+## ChatGPT skill
+
+`chatgpt-skills/j33-blog-promo-kit-v2/` is the same promo kit for ChatGPT: the image tool draws a plate without lettering, then `scripts/render_campaign.py` sets the title, category and J33.AI wordmark at the exact platform sizes with the bundled Inter font, picking warm white or charcoal from the background under the text. Upload it in ChatGPT under Skills → Create → Upload from your computer (zip the folder), then paste an article.
+
 ## Contributing
 
 One directory per plugin under `plugins/`, with `.claude-plugin/plugin.json` (manifest only — nothing else inside `.claude-plugin/`) and `skills/<name>/SKILL.md` at plugin root (agentskills spec: `name` + `description` frontmatter, description starts with "Use when..."). MCP servers go in `.mcp.json` at plugin root. Add an entry to `.claude-plugin/marketplace.json`. Skills must be tested before publishing — baseline an agent without the skill, verify compliance with it.
